@@ -7,7 +7,7 @@ import { submitLeaveOD, approveLeaveOD } from '../controllers/leaveODController'
 import { createCounselingLog, getCounselingLogs } from '../controllers/counselingController';
 import { getAuditLogs } from '../controllers/auditController';
 import { generatePDFNotice } from '../controllers/pdfController';
-import { registerUser, loginUser, updateProfile, sendAdminOTP, verifyAdminOTP } from '../controllers/authController';
+import { registerUser, loginUser, verifyLoginOtp, updateProfile } from '../controllers/authController';
 import { bulkUploadExcel } from '../controllers/uploadController';
 
 const router = Router();
@@ -16,8 +16,7 @@ const router = Router();
 router.post('/auth/register', registerUser);
 router.post('/auth/login', loginUser);
 router.put('/auth/profile', updateProfile);
-router.post('/auth/send-admin-otp', sendAdminOTP);
-router.post('/auth/verify-admin-otp', verifyAdminOTP);
+router.post('/auth/login/verify-otp', verifyLoginOtp);
 
 // Bulk Excel / CSV Upload Route
 router.post('/upload/bulk-excel', bulkUploadExcel);

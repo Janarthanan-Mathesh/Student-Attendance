@@ -1,13 +1,14 @@
 import { Request, Response } from 'express';
 import { getAsync, runAsync, allAsync } from '../db/database';
 import { z } from 'zod';
+import { createEmailOtp, verifyEmailOtp } from '../services/emailOtp';
 
 const RegisterSchema = z.object({
   name: z.string().min(2),
   register_no: z.string().min(3),
   email: z.string().email(),
   phone: z.string().min(5),
-  role: z.enum(['STUDENT', 'FACULTY', 'PARENT', 'ADMIN']),
+  role: z.enum(['STUDENT', 'FACULTY', 'PARENT']),
   department: z.string().min(2),
   section: z.string().optional().default('A'),
   parent_name: z.string().optional(),
@@ -23,81 +24,11 @@ const LoginSchema = z.object({
   role: z.enum(['STUDENT', 'FACULTY', 'PARENT', 'ADMIN']).optional()
 });
 
-let currentAdminOTP = '849201';
-let currentAdminUserId = '';
-
-export async function sendAdminOTP(req: Request, res: Response) {
-  try {
-    const userId = String(req.body?.user_id || '');
-    const adminUser = await getAsync<any>(`SELECT * FROM users WHERE user_id = ? AND role = 'ADMIN' LIMIT 1`, [userId]);
-    if (!adminUser) {
-      return res.status(403).json({ success: false, error: 'Sign in with an administrator account before requesting a verification code.' });
-    }
-
-    // Generate random 6-digit code
-    currentAdminOTP = Math.floor(100000 + Math.random() * 900000).toString();
-    currentAdminUserId = adminUser.user_id;
-
-    const targetEmail = adminUser.email;
-    const targetPhone = adminUser.phone;
-
-    const otpPayload = `SECURITY NOTICE: Your Admin verification code is ${currentAdminOTP}. Code dispatched identically to Email (${targetEmail}) & Phone (${targetPhone}).`;
-
-    // Log to communication_logs table
-    await runAsync(
-      `INSERT INTO communication_logs (student_id, parent_id, channel, warning_level, message_payload, delivery_status, gateway_response_id)
-       VALUES (?, 'ADM001', 'SMS', 'CRITICAL', ?, 'DELIVERED', ?)`,
-      [currentAdminUserId, otpPayload, `OTP_${Date.now()}`]
-    );
-
-    await runAsync(
-      `INSERT INTO audit_logs (action_type, performed_by, target_id, details) VALUES (?, ?, ?, ?)`,
-      ['ADMIN_2FA_OTP_SENT', currentAdminUserId, currentAdminUserId, `Admin verification code sent to ${targetEmail} and ${targetPhone}`]
-    );
-
-    return res.json({
-      success: true,
-      message: `Verification code sent to ${targetEmail} and ${targetPhone}`,
-      email: targetEmail,
-      phone: targetPhone,
-      otp_code: currentAdminOTP // Returned for live testing preview
-    });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-}
-
-export async function verifyAdminOTP(req: Request, res: Response) {
-  try {
-    const { otp_code, user_id } = req.body;
-
-    if (!otp_code || otp_code.trim() !== currentAdminOTP.trim() || user_id !== currentAdminUserId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid 2FA Verification Code. Please enter the matching 6-digit code sent to your email/phone.'
-      });
-    }
-
-    const adminUser = await getAsync(`SELECT * FROM users WHERE role = 'ADMIN' AND user_id = ? LIMIT 1`, [currentAdminUserId]);
-
-    if (!adminUser) {
-      return res.status(404).json({ success: false, error: 'Administrator account was not found.' });
-    }
-    const { password_hash: _passwordHash, ...safeAdminUser } = adminUser;
-
-    return res.json({
-      success: true,
-      message: 'Admin 2FA verification successful!',
-      user: safeAdminUser
-    });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-}
-
 export async function registerUser(req: Request, res: Response) {
   try {
-    const parse = RegisterSchema.safeParse(req.body);
+    const body = req.body || {};
+    const registration = body.registration || body;
+    const parse = RegisterSchema.safeParse(registration);
     if (!parse.success) {
       return res.status(400).json({ success: false, error: parse.error.issues });
     }
@@ -119,8 +50,8 @@ export async function registerUser(req: Request, res: Response) {
 
     // Check if user already exists
     const existing = await getAsync(
-      `SELECT * FROM users WHERE register_no = ? OR email = ?`,
-      [register_no, email]
+      `SELECT user_id FROM users WHERE upper(register_no) = ? OR lower(email) = ? LIMIT 1`,
+      [register_no.trim().toUpperCase(), email.trim().toLowerCase()]
     );
 
     if (existing) {
@@ -129,6 +60,15 @@ export async function registerUser(req: Request, res: Response) {
         error: 'A user with this Register No or Email already exists. Please login instead.'
       });
     }
+
+    if (!body.otp_code) {
+      const otp = await createEmailOtp(email, 'REGISTER', null);
+      return res.json({ success: true, requires_otp: true, message: 'Enter the verification code sent to your email.', ...otp });
+    }
+    if (!/^\d{6}$/.test(String(body.otp_code)) || !body.challenge_id) {
+      return res.status(400).json({ success: false, error: 'Enter the six-digit code sent to your email.' });
+    }
+    await verifyEmailOtp(String(body.challenge_id), String(body.otp_code), 'REGISTER', email);
 
     const userId = register_no.toUpperCase();
     const parentId = `PAR_${userId.slice(-4)}`;
@@ -194,15 +134,18 @@ export async function registerUser(req: Request, res: Response) {
       ['USER_REGISTRATION', name, userId, `Registered first-time account with role ${role}`]
     );
 
-    const newUser = await getAsync(`SELECT * FROM users WHERE user_id = ?`, [userId]);
+    const newUser = await getAsync<any>(`SELECT * FROM users WHERE user_id = ?`, [userId]);
+    if (!newUser) throw new Error('The account was created but could not be loaded.');
+    const { password_hash: _passwordHash, ...safeUser } = newUser;
 
     return res.json({
       success: true,
       message: 'Registration successful! Welcome to Attendance Tracker.',
-      user: newUser
+      user: safeUser
     });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
+    const status = err.message.includes('wait one minute') ? 429 : err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') || err.message.includes('does not match') ? 400 : err.message.includes('Email OTP is not configured') || err.message.includes('verification email could not be sent') ? 503 : 500;
+    return res.status(status).json({ success: false, error: err.message });
   }
 }
 
@@ -222,33 +165,45 @@ export async function loginUser(req: Request, res: Response) {
        ORDER BY u.id DESC`,
       [identifier.trim().toUpperCase(), identifier.trim().toLowerCase(), identifier.trim().toLowerCase(), identifier.trim(), role || null, role || null]
     );
-    const matchingUser = candidates.find((candidate) => password && candidate.password_hash === password);
-    const user = matchingUser || candidates[0];
+    const user = candidates.find((candidate) => password && candidate.password_hash === password);
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        error: 'No account found with this Register No or Email. Please register as a first-time user.'
+        error: candidates.length ? 'Incorrect password.' : 'No account found with this Register No or Email. Please register as a first-time user.'
       });
     }
 
-    if (!password || !matchingUser) {
-      return res.status(401).json({ success: false, error: 'Incorrect password.' });
-    }
-
-    // Audit log
-    await runAsync(
-      `INSERT INTO audit_logs (action_type, performed_by, target_id, details) VALUES (?, ?, ?, ?)`,
-      ['USER_LOGIN', user.name, user.user_id, `User logged in under role ${user.role}`]
-    );
+    const otp = await createEmailOtp(user.email, 'LOGIN', user.user_id);
 
     return res.json({
       success: true,
-      message: `Welcome back, ${user.name}!`,
-      user: (({ password_hash: _passwordHash, ...safeUser }) => safeUser)(user)
+      requires_otp: true,
+      message: 'Enter the verification code sent to your account email.',
+      ...otp
     });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
+    const status = err.message.includes('wait one minute') ? 429 : err.message.includes('Email OTP is not configured') || err.message.includes('verification email could not be sent') ? 503 : 500;
+    return res.status(status).json({ success: false, error: err.message });
+  }
+}
+
+export async function verifyLoginOtp(req: Request, res: Response) {
+  try {
+    const parsed = z.object({ challenge_id: z.string().uuid(), otp_code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ success: false, error: 'Enter the six-digit code sent to your email.' });
+    const challenge = await verifyEmailOtp(parsed.data.challenge_id, parsed.data.otp_code, 'LOGIN');
+    const user = await getAsync<any>(`SELECT * FROM users WHERE user_id = ? LIMIT 1`, [challenge.user_id]);
+    if (!user) return res.status(404).json({ success: false, error: 'Account not found.' });
+    await runAsync(
+      `INSERT INTO audit_logs (action_type, performed_by, target_id, details) VALUES (?, ?, ?, ?)`,
+      ['USER_LOGIN', user.name, user.user_id, `User logged in under role ${user.role} after email OTP verification`]
+    );
+    const { password_hash: _passwordHash, ...safeUser } = user;
+    return res.json({ success: true, message: `Welcome back, ${user.name}!`, user: safeUser });
+  } catch (err: any) {
+    const status = err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') ? 400 : 500;
+    return res.status(status).json({ success: false, error: err.message });
   }
 }
 

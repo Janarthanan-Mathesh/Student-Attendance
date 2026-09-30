@@ -41,6 +41,19 @@ export function allAsync<T = any>(sql: string, params: any[] = []): Promise<T[]>
 
 export async function initDatabase() {
   await runAsync(`
+    CREATE TABLE IF NOT EXISTS email_otp_challenges (
+      challenge_id TEXT PRIMARY KEY,
+      purpose TEXT NOT NULL,
+      user_id TEXT,
+      email TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+  `);
+
+  await runAsync(`
     CREATE TABLE IF NOT EXISTS app_migrations (
       migration_key TEXT PRIMARY KEY,
       applied_at TEXT DEFAULT CURRENT_TIMESTAMP

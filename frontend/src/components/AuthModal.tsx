@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { loginUserAPI, registerUserAPI, sendAdminOTPAPI, verifyAdminOTPAPI } from '../lib/api';
+import { loginUserAPI, registerUserAPI, verifyLoginOTPAPI, verifyRegistrationOTPAPI } from '../lib/api';
 import { User, Users, Smartphone, ShieldCheck, LogIn, UserPlus, Mail, Phone, Lock, Building, BookOpen, CheckCircle, AlertCircle, ArrowLeft, Globe } from 'lucide-react';
 
 interface AuthModalProps {
@@ -36,11 +36,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
   const [regError, setRegError] = useState<string | null>(null);
   const [regSuccessMsg, setRegSuccessMsg] = useState<string | null>(null);
 
-  // Admin 2FA State
-  const [admin2FAStep, setAdmin2FAStep] = useState<boolean>(false);
-  const [adminUserId, setAdminUserId] = useState<string>('');
+  // Email OTP verification state
+  const [loginOtpStep, setLoginOtpStep] = useState<boolean>(false);
+  const [loginChallengeId, setLoginChallengeId] = useState<string>('');
+  const [loginOtpEmailHint, setLoginOtpEmailHint] = useState<string>('');
   const [otpCodeInput, setOtpCodeInput] = useState<string>('');
-  const [liveOtpPreview, setLiveOtpPreview] = useState<string | null>(null);
+  const [registerOtpStep, setRegisterOtpStep] = useState<boolean>(false);
+  const [registerChallengeId, setRegisterChallengeId] = useState<string>('');
+  const [registerOtpEmailHint, setRegisterOtpEmailHint] = useState<string>('');
+  const [registerOtpCode, setRegisterOtpCode] = useState<string>('');
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,46 +53,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
     setLoginError(null);
 
     try {
-      if (selectedPersona === 'ADMIN') {
-        const loginRes = await loginUserAPI(loginIdentifier, loginPassword, selectedPersona);
-        if (!loginRes.success || !loginRes.user || loginRes.user.role !== 'ADMIN') {
-          setLoginError(loginRes.error || 'Use the administrator ID and password to continue.');
-          return;
-        }
-        setAdminUserId(loginRes.user.user_id);
-        const res = await sendAdminOTPAPI(loginRes.user.user_id);
-        if (res.success) {
-          setAdmin2FAStep(true);
-          setOtpCodeInput('');
-          setLiveOtpPreview(res.otp_code || '849201');
-        } else {
-          setLoginError(res.error || 'Could not start admin verification. Please try again.');
-        }
-        return;
-      }
-
       const res = await loginUserAPI(loginIdentifier, loginPassword, selectedPersona || undefined);
-      if (res.success && res.user) {
+      if (res.success && res.requires_otp && res.challenge_id) {
+        setLoginChallengeId(res.challenge_id);
+        setLoginOtpEmailHint(res.email_hint || 'your account email');
+        setLoginOtpStep(true);
+        setOtpCodeInput('');
+      } else if (res.success && res.user) {
         onSuccess(res.user);
         if (onClose) onClose();
       } else {
         setLoginError(res.error || 'Invalid credentials or account not found.');
       }
     } catch {
-      setLoginError('Could not connect to the attendance server. The website is online, but its backend API may not be deployed or configured yet.');
+      setLoginError('Could not connect to the attendance server or send the email code. Please try again later.');
     }
   };
 
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
-
-    const res = await verifyAdminOTPAPI(otpCodeInput, adminUserId);
-    if (res.success && res.user) {
-      onSuccess(res.user);
-      if (onClose) onClose();
-    } else {
-      setLoginError(res.error || 'Invalid 2FA code entered.');
+    try {
+      const res = await verifyLoginOTPAPI(loginChallengeId, otpCodeInput);
+      if (res.success && res.user) {
+        onSuccess(res.user);
+        if (onClose) onClose();
+      } else {
+        setLoginError(res.error || 'Invalid verification code.');
+      }
+    } catch {
+      setLoginError('Could not verify the code. Check your connection and try again.');
     }
   };
 
@@ -114,15 +108,51 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
       password: regPassword
     };
 
-    const res = await registerUserAPI(payload);
-    if (res.success && res.user) {
-      setRegSuccessMsg(`Registration successful! Logged in as ${selectedPersona}.`);
-      setTimeout(() => {
-        onSuccess(res.user);
-        if (onClose) onClose();
-      }, 1500);
-    } else {
-      setRegError(typeof res.error === 'string' ? res.error : 'Registration error. Please check your inputs.');
+    try {
+      const res = await registerUserAPI(payload);
+      if (res.success && res.requires_otp && res.challenge_id) {
+        setRegisterChallengeId(res.challenge_id);
+        setRegisterOtpEmailHint(res.email_hint || regEmail);
+        setRegisterOtpCode('');
+        setRegisterOtpStep(true);
+      } else {
+        setRegError(res.error || 'Could not start email verification.');
+      }
+    } catch {
+      setRegError('Could not connect to the attendance server or send the email code. Please try again later.');
+    }
+  };
+
+  const handleVerifyRegistrationOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegError(null);
+    const payload = {
+      name: regName,
+      register_no: regRegisterNo,
+      email: regEmail,
+      phone: regPhone,
+      role: selectedPersona,
+      department: regDepartment,
+      section: regSection,
+      parent_name: regParentName,
+      parent_phone: regParentPhone,
+      parent_email: regParentEmail,
+      mentor_name: regMentorName,
+      password: regPassword
+    };
+    try {
+      const res = await verifyRegistrationOTPAPI(payload, registerChallengeId, registerOtpCode);
+      if (res.success && res.user) {
+        setRegSuccessMsg(`Email verified. Registration successful!`);
+        setTimeout(() => {
+          onSuccess(res.user);
+          if (onClose) onClose();
+        }, 1000);
+      } else {
+        setRegError(typeof res.error === 'string' ? res.error : 'The code is invalid or expired. Please try again.');
+      }
+    } catch {
+      setRegError('Could not connect to the attendance server. Please try again later.');
     }
   };
 
@@ -207,7 +237,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Student Card */}
               <button
-                onClick={() => { setSelectedPersona('STUDENT'); setRegRegisterNo(''); }}
+                onClick={() => { setSelectedPersona('STUDENT'); setActiveTab('LOGIN'); setRegRegisterNo(''); }}
                 className="p-5 rounded-2xl glass-card border border-cyan-500/30 bg-cyan-950/20 hover:bg-cyan-950/40 text-left transition-all hover:scale-[1.02] space-y-2 group"
               >
                 <div className="flex items-center justify-between">
@@ -226,7 +256,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
 
               {/* Faculty Card */}
               <button
-                onClick={() => { setSelectedPersona('FACULTY'); setRegRegisterNo(''); }}
+                onClick={() => { setSelectedPersona('FACULTY'); setActiveTab('LOGIN'); setRegRegisterNo(''); }}
                 className="p-5 rounded-2xl glass-card border border-indigo-500/30 bg-indigo-950/20 hover:bg-indigo-950/40 text-left transition-all hover:scale-[1.02] space-y-2 group"
               >
                 <div className="flex items-center justify-between">
@@ -245,7 +275,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
 
               {/* Parent Card */}
               <button
-                onClick={() => { setSelectedPersona('PARENT'); setRegRegisterNo(''); }}
+                onClick={() => { setSelectedPersona('PARENT'); setActiveTab('LOGIN'); setRegRegisterNo(''); }}
                 className="p-5 rounded-2xl glass-card border border-emerald-500/30 bg-emerald-950/20 hover:bg-emerald-950/40 text-left transition-all hover:scale-[1.02] space-y-2 group"
               >
                 <div className="flex items-center justify-between">
@@ -264,7 +294,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
 
               {/* Admin Card */}
               <button
-                onClick={() => { setSelectedPersona('ADMIN'); setRegRegisterNo('ADM001'); }}
+                onClick={() => { setSelectedPersona('ADMIN'); setActiveTab('LOGIN'); setRegRegisterNo('ADM001'); }}
                 className="p-5 rounded-2xl glass-card border border-purple-500/30 bg-purple-950/20 hover:bg-purple-950/40 text-left transition-all hover:scale-[1.02] space-y-2 group"
               >
                 <div className="flex items-center justify-between">
@@ -293,7 +323,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                 <p className="font-extrabold text-sm text-white">{currentConfig?.title}</p>
               </div>
               <button
-                onClick={() => setSelectedPersona(null)}
+                onClick={() => { setSelectedPersona(null); setActiveTab('LOGIN'); setRegisterOtpStep(false); setLoginOtpStep(false); }}
                 className="px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:text-white text-[11px]"
               >
                 Switch Portal
@@ -312,7 +342,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                 <span>{selectedPersona} Login</span>
               </button>
 
-              <button
+              {selectedPersona === 'ADMIN' ? (
+                <div className="py-2 text-center text-slate-500">Admin accounts are provisioned by the institution.</div>
+              ) : <button
                 onClick={() => setActiveTab('REGISTER')}
                 className={`py-2 rounded-lg transition-all flex items-center justify-center space-x-2 ${
                   activeTab === 'REGISTER' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
@@ -320,17 +352,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
               >
                 <UserPlus className="w-4 h-4" />
                 <span>First-Time Registration</span>
-              </button>
+              </button>}
             </div>
 
             {/* LOGIN FORM */}
             {activeTab === 'LOGIN' && (
-              admin2FAStep ? (
+              loginOtpStep ? (
                 <form onSubmit={handleVerifyOTP} className="space-y-4">
-                  <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-4 space-y-2">
-                    <h4 className="font-bold text-white">Admin verification</h4>
-                    <p className="text-xs text-slate-300">Enter the six-digit verification code to finish signing in.</p>
-                    {liveOtpPreview && <p className="text-xs text-purple-200">Demo verification code: <strong className="font-mono">{liveOtpPreview}</strong></p>}
+                  <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-2">
+                    <h4 className="font-bold text-white">Check your email</h4>
+                    <p className="text-xs text-slate-300">Enter the six-digit sign-in code sent to {loginOtpEmailHint}. It expires in 10 minutes.</p>
                   </div>
                   <div>
                     <label className="block text-slate-300 font-medium mb-1">Verification code</label>
@@ -343,12 +374,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                       value={otpCodeInput}
                       onChange={(event) => setOtpCodeInput(event.target.value.replace(/\D/g, '').slice(0, 6))}
                       placeholder="Enter 6-digit code"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-200 tracking-widest focus:outline-none focus:border-purple-500"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-200 tracking-widest focus:outline-none focus:border-cyan-500"
                     />
                   </div>
                   {loginError && <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs">{loginError}</div>}
-                  <button type="submit" className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg">Verify and Sign In</button>
-                  <button type="button" onClick={() => { setAdmin2FAStep(false); setLoginError(null); }} className="w-full py-2 text-slate-400 hover:text-white text-xs">Back to admin login</button>
+                  <button type="submit" className="w-full py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg">Verify and Sign In</button>
+                  <button type="button" onClick={() => { setLoginOtpStep(false); setLoginChallengeId(''); setLoginError(null); }} className="w-full py-2 text-slate-400 hover:text-white text-xs">Back to login</button>
                 </form>
               ) : <div className="space-y-4">
                 
@@ -406,7 +437,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
 
             {/* TAILORED REGISTRATION FORM */}
             {activeTab === 'REGISTER' && (
-              <form onSubmit={handleRegisterSubmit} className="space-y-4">
+              registerOtpStep ? (
+                <form onSubmit={handleVerifyRegistrationOTP} className="space-y-4">
+                  <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-2">
+                    <h4 className="font-bold text-white">Verify your email</h4>
+                    <p className="text-xs text-slate-300">Enter the six-digit registration code sent to {registerOtpEmailHint}. It expires in 10 minutes.</p>
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-medium mb-1" htmlFor="registration-email-otp">Email verification code</label>
+                    <input
+                      id="registration-email-otp"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      required
+                      value={registerOtpCode}
+                      onChange={(event) => setRegisterOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="Enter 6-digit code"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-200 tracking-widest focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  {regError && <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs">{regError}</div>}
+                  <button type="submit" className={`w-full py-3 rounded-xl text-white font-bold text-xs shadow-lg ${currentConfig?.btnColor}`}>Verify and Create Account</button>
+                  <button type="button" onClick={() => { setRegisterOtpStep(false); setRegisterChallengeId(''); setRegError(null); }} className="w-full py-2 text-slate-400 hover:text-white text-xs">Back to registration</button>
+                </form>
+              ) : <form onSubmit={handleRegisterSubmit} className="space-y-4">
                 
                 {/* PERSONA 1: STUDENT TAILORED REGISTRATION */}
                 {selectedPersona === 'STUDENT' && (

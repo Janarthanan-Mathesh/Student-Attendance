@@ -29,6 +29,15 @@ export async function registerUserAPI(data: any) {
   return await res.json();
 }
 
+export async function verifyRegistrationOTPAPI(data: any, challenge_id: string, otp_code: string) {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...data, challenge_id, otp_code })
+  });
+  return await res.json();
+}
+
 export async function loginUserAPI(identifier: string, password?: string, role?: UserProfile['role']) {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
@@ -47,20 +56,11 @@ export async function updateProfileAPI(data: any) {
   return await res.json();
 }
 
-export async function sendAdminOTPAPI(user_id: string) {
-  const res = await fetch(`${API_BASE}/auth/send-admin-otp`, {
+export async function verifyLoginOTPAPI(challenge_id: string, otp_code: string) {
+  const res = await fetch(`${API_BASE}/auth/login/verify-otp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id })
-  });
-  return await res.json();
-}
-
-export async function verifyAdminOTPAPI(otp_code: string, user_id: string) {
-  const res = await fetch(`${API_BASE}/auth/verify-admin-otp`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ otp_code, user_id })
+    body: JSON.stringify({ challenge_id, otp_code })
   });
   return await res.json();
 }
