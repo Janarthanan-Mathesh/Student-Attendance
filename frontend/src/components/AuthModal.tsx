@@ -48,30 +48,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
 
     setLoginError(null);
 
-    if (selectedPersona === 'ADMIN') {
-      const loginRes = await loginUserAPI(loginIdentifier, loginPassword, selectedPersona);
-      if (!loginRes.success || !loginRes.user || loginRes.user.role !== 'ADMIN') {
-        setLoginError(loginRes.error || 'Use the administrator ID and password to continue.');
+    try {
+      if (selectedPersona === 'ADMIN') {
+        const loginRes = await loginUserAPI(loginIdentifier, loginPassword, selectedPersona);
+        if (!loginRes.success || !loginRes.user || loginRes.user.role !== 'ADMIN') {
+          setLoginError(loginRes.error || 'Use the administrator ID and password to continue.');
+          return;
+        }
+        setAdminUserId(loginRes.user.user_id);
+        const res = await sendAdminOTPAPI(loginRes.user.user_id);
+        if (res.success) {
+          setAdmin2FAStep(true);
+          setOtpCodeInput('');
+          setLiveOtpPreview(res.otp_code || '849201');
+        } else {
+          setLoginError(res.error || 'Could not start admin verification. Please try again.');
+        }
         return;
       }
-      setAdminUserId(loginRes.user.user_id);
-      const res = await sendAdminOTPAPI(loginRes.user.user_id);
-      if (res.success) {
-        setAdmin2FAStep(true);
-        setOtpCodeInput('');
-        setLiveOtpPreview(res.otp_code || '849201');
-      } else {
-        setLoginError(res.error || 'Could not start admin verification. Please try again.');
-      }
-      return;
-    }
 
-    const res = await loginUserAPI(loginIdentifier, loginPassword, selectedPersona || undefined);
-    if (res.success && res.user) {
-      onSuccess(res.user);
-      if (onClose) onClose();
-    } else {
-      setLoginError(res.error || 'Invalid credentials or account not found.');
+      const res = await loginUserAPI(loginIdentifier, loginPassword, selectedPersona || undefined);
+      if (res.success && res.user) {
+        onSuccess(res.user);
+        if (onClose) onClose();
+      } else {
+        setLoginError(res.error || 'Invalid credentials or account not found.');
+      }
+    } catch {
+      setLoginError('Could not connect to the attendance server. The website is online, but its backend API may not be deployed or configured yet.');
     }
   };
 

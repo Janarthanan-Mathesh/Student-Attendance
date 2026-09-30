@@ -1,6 +1,8 @@
 import { Student, DeficiencyRecord, CommunicationLog, LeaveODRequest, CounselingLog, AuditLog, UserProfile } from '../types';
 
-const API_BASE = '/api';
+// Set VITE_API_BASE_URL in production to the deployed backend URL ending in /api.
+// In local development, the relative path is served through Vite's /api proxy.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
 function getUserHeaders() {
   try {
