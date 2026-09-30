@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { runAsync, getAsync } from '../db/database';
-import { attendanceRisk, normalizeAttendanceRosterRow, stableAccountKey, uniqueAccountEmail } from '../services/rosterUtils';
+import { AttendanceRosterRecord, attendanceRisk, normalizeAttendanceRosterRow, stableAccountKey, uniqueAccountEmail } from '../services/rosterUtils';
+import { hasInstitutionEmail, validateStudentRosterIdentity } from '../services/departmentRules';
 
 export async function bulkUploadExcel(req: Request, res: Response) {
   try {
@@ -9,9 +10,29 @@ export async function bulkUploadExcel(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: 'No CSV rows provided. Choose a CSV with student, parent and mentor columns.' });
     }
 
-    const roster = rows.map((row: Record<string, unknown>) => normalizeAttendanceRosterRow(row)).filter((student) => student !== null);
+    const entries = rows
+      .map((row: Record<string, unknown>, index: number) => ({ student: normalizeAttendanceRosterRow(row), rowNumber: index + 2 }))
+      .filter((entry): entry is { student: AttendanceRosterRecord; rowNumber: number } => entry.student !== null);
+    const roster = entries.map((entry) => entry.student);
     if (!roster.length) {
       return res.status(400).json({ success: false, error: 'No valid students found. Include ROLL NO. and STUDENT NAME columns.' });
+    }
+
+    const validationErrors: string[] = [];
+    for (const { student, rowNumber } of entries) {
+      const identity = validateStudentRosterIdentity(student.registerNo, student.studentEmail, student.department);
+      if (!identity.valid) validationErrors.push(`Row ${rowNumber}: ${identity.error}`);
+      else student.department = identity.name;
+      if (!hasInstitutionEmail(student.studentEmail)) validationErrors.push(`Row ${rowNumber}: student email must end with @bitsathy.ac.in.`);
+      if (!hasInstitutionEmail(student.parentEmail)) validationErrors.push(`Row ${rowNumber}: parent email must end with @bitsathy.ac.in.`);
+      if (!hasInstitutionEmail(student.mentorEmail)) validationErrors.push(`Row ${rowNumber}: mentor email must end with @bitsathy.ac.in.`);
+    }
+    if (validationErrors.length) {
+      return res.status(400).json({
+        success: false,
+        error: `CSV validation failed. Correct these rows and upload again: ${validationErrors.slice(0, 20).join(' ')}`,
+        error_count: validationErrors.length
+      });
     }
 
     await runAsync(
@@ -33,7 +54,7 @@ export async function bulkUploadExcel(req: Request, res: Response) {
       mentorAccounts.set(student.mentorName, {
         name: student.mentorName,
         key: mentorKey,
-        email: student.mentorEmail || `mentor.${mentorKey.toLowerCase()}@attendance.local`,
+        email: student.mentorEmail,
         id: student.mentorId || `FAC_${mentorKey}`
       });
 

@@ -55,20 +55,18 @@ export function normalizeAttendanceRosterRow(row: Record<string, unknown>): Atte
   const mentorEmail = value(row, 'MENTOR EMAIL', 'mentor_email', 'Faculty Email').toLowerCase();
   const mentorId = value(row, 'MENTOR ID', 'mentor_id', 'Faculty ID').toUpperCase();
   const parentName = value(row, 'PARENT NAME (FATHER)', 'PARENT NAME', 'parent_name', 'Father Name') || `Parent/Guardian of ${name}`;
-  const parentIdSuffix = registerNo.replace(/[^A-Z0-9]/g, '').toLowerCase();
-
   return {
     registerNo,
     name,
-    studentEmail: value(row, 'STUDENT MAIL ID', 'student_email', 'email', 'Student Email').toLowerCase() || `${registerNo.toLowerCase()}@institution.edu`,
+    studentEmail: value(row, 'STUDENT MAIL ID', 'student_email', 'email', 'Student Email').toLowerCase(),
     studentPhone: value(row, 'STUDENT MOBILE NO.', 'student_phone', 'phone', 'Student Phone') || 'N/A',
     parentName,
     parentPhone: value(row, 'PARENT MOBILE NO.', 'parent_phone', 'Parent Phone', 'Parent Mobile') || 'N/A',
-    parentEmail: value(row, 'PARENT MAIL ID', 'parent_email', 'Parent Email').toLowerCase() || `${parentIdSuffix}@parent.local`,
+    parentEmail: value(row, 'PARENT MAIL ID', 'parent_email', 'Parent Email').toLowerCase(),
     mentorName,
     mentorEmail,
     mentorId,
-    department: value(row, 'DEPARTMENT', 'department') || 'Artificial Intelligence and Data Science',
+    department: value(row, 'DEPARTMENT', 'department'),
     section: value(row, 'SECTION', 'section') || 'A',
     workingDays,
     presentDays,
@@ -87,6 +85,10 @@ export function stableAccountKey(label: string): string {
 }
 
 export function uniqueAccountEmail(email: string, accountKey: string): string {
+  const studentAddress = /^(.+?)(\.[a-z]{2}\d{2})(@bitsathy\.ac\.in)$/i.exec(email);
+  if (studentAddress) {
+    return `${studentAddress[1]}+${accountKey.toLowerCase()}${studentAddress[2]}${studentAddress[3]}`;
+  }
   return email.replace(/@/, `+${accountKey.toLowerCase()}@`);
 }
 

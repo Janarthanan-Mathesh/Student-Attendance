@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { getAsync, runAsync, allAsync } from '../db/database';
 import { z } from 'zod';
 import { beginAuthenticatorLogin, beginAuthenticatorRegistration, verifyAuthenticatorChallenge } from '../services/authenticator';
+import { departmentCodeFromName, departmentCodeFromRoll, hasInstitutionEmail, STUDENT_DEPARTMENTS, validateStudentDepartmentIdentity } from '../services/departmentRules';
 
 const RegisterSchema = z.object({
   name: z.string().min(2),
@@ -33,25 +34,39 @@ export async function registerUser(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: parse.error.issues });
     }
 
-    const {
-      name,
-      register_no,
-      email,
-      phone,
-      role,
-      department,
-      section,
-      parent_name,
-      parent_phone,
-      parent_email,
-      mentor_name,
-      password
-    } = parse.data;
+    const { register_no, email, role } = parse.data;
+    let department = parse.data.department;
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!hasInstitutionEmail(normalizedEmail)) {
+      return res.status(400).json({ success: false, error: 'Use your institutional email ending in @bitsathy.ac.in.' });
+    }
+
+    if (role === 'STUDENT') {
+      const identity = validateStudentDepartmentIdentity(register_no, normalizedEmail, department);
+      if (!identity.valid) return res.status(400).json({ success: false, error: identity.error });
+      department = identity.name;
+    }
+
+    let lookupRegisterNo = register_no.trim().toUpperCase();
+    if (role === 'PARENT') {
+      const linkedRoll = lookupRegisterNo;
+      const linkedCode = departmentCodeFromRoll(linkedRoll);
+      if (!linkedCode) {
+        return res.status(400).json({ success: false, error: 'Enter a valid student roll number in the 7376YY[1/2][department code][three digits] format.' });
+      }
+      const linkedStudent = await getAsync<{ department: string }>(`SELECT department FROM students WHERE upper(register_no) = ? LIMIT 1`, [linkedRoll]);
+      if (!linkedStudent) return res.status(400).json({ success: false, error: 'No student with that roll number is in the roster yet.' });
+      const actualCode = departmentCodeFromName(linkedStudent.department);
+      if (actualCode !== linkedCode) return res.status(400).json({ success: false, error: 'The linked student roll number does not match the department in the roster.' });
+      department = STUDENT_DEPARTMENTS[linkedCode].name;
+      lookupRegisterNo = `PAR_${linkedRoll}`;
+    }
 
     // Check if user already exists
     const existing = await getAsync(
       `SELECT user_id FROM users WHERE upper(register_no) = ? OR lower(email) = ? LIMIT 1`,
-      [register_no.trim().toUpperCase(), email.trim().toLowerCase()]
+      [lookupRegisterNo, normalizedEmail]
     );
 
     if (existing) {
@@ -63,8 +78,10 @@ export async function registerUser(req: Request, res: Response) {
 
     const challenge = await beginAuthenticatorRegistration({
       ...parse.data,
-      email: email.trim().toLowerCase(),
-      register_no: register_no.trim().toUpperCase()
+      email: normalizedEmail,
+      register_no: lookupRegisterNo,
+      linked_student_roll: role === 'PARENT' ? register_no.trim().toUpperCase() : undefined,
+      department
     });
     return res.json({
       success: true,
@@ -115,6 +132,10 @@ export async function loginUser(req: Request, res: Response) {
       });
     }
 
+    if (user.role !== 'ADMIN' && !hasInstitutionEmail(user.email || '')) {
+      return res.status(403).json({ success: false, error: 'This account must use an institutional @bitsathy.ac.in email. Contact the administrator to correct the roster email.' });
+    }
+
     const authenticator = await beginAuthenticatorLogin(user.user_id, user.email);
 
     return res.json({
@@ -146,9 +167,26 @@ export async function verifyLoginAuthenticator(req: Request, res: Response) {
 export async function updateProfile(req: Request, res: Response) {
   try {
     const { user_id, phone, email, parent_name, parent_phone, parent_email, department, section, mentor_name } = req.body;
+    let effectiveDepartment = department;
 
     if (!user_id) {
       return res.status(400).json({ success: false, error: 'user_id is required' });
+    }
+
+    const existingUser = await getAsync<{ role: string; email: string; register_no: string; department: string }>(
+      `SELECT role, email, register_no, department FROM users WHERE user_id = ? OR register_no = ? LIMIT 1`,
+      [user_id, user_id]
+    );
+    if (existingUser && existingUser.role !== 'ADMIN') {
+      const nextEmail = String(email || existingUser.email).trim().toLowerCase();
+      if (!hasInstitutionEmail(nextEmail)) {
+        return res.status(400).json({ success: false, error: 'Student, mentor, and parent accounts must use an @bitsathy.ac.in email.' });
+      }
+      if (existingUser.role === 'STUDENT') {
+        const identity = validateStudentDepartmentIdentity(existingUser.register_no, nextEmail, String(department || existingUser.department));
+        if (!identity.valid) return res.status(400).json({ success: false, error: identity.error });
+        effectiveDepartment = identity.name;
+      }
     }
 
     await runAsync(
@@ -162,7 +200,7 @@ export async function updateProfile(req: Request, res: Response) {
            section = COALESCE(?, section),
            mentor_name = COALESCE(?, mentor_name)
        WHERE user_id = ? OR register_no = ?`,
-      [phone, email, parent_name, parent_phone, parent_email, department, section, mentor_name, user_id, user_id]
+      [phone, email, parent_name, parent_phone, parent_email, effectiveDepartment, section, mentor_name, user_id, user_id]
     );
 
     // Also update students table if exists
@@ -177,7 +215,7 @@ export async function updateProfile(req: Request, res: Response) {
            section = COALESCE(?, section),
            mentor_name = COALESCE(?, mentor_name)
        WHERE student_id = ? OR register_no = ?`,
-      [phone, email, parent_name, parent_phone, parent_email, department, section, mentor_name, user_id, user_id]
+      [phone, email, parent_name, parent_phone, parent_email, effectiveDepartment, section, mentor_name, user_id, user_id]
     );
 
     const updatedUser = await getAsync(`SELECT * FROM users WHERE user_id = ? OR register_no = ?`, [user_id, user_id]);

@@ -1,6 +1,7 @@
 import { initDatabase, runAsync, allAsync } from './database';
 import rosterRows from '../data/attendance_roster.json';
 import { attendanceRisk, normalizeAttendanceRosterRow, stableAccountKey, uniqueAccountEmail } from '../services/rosterUtils';
+import { hasInstitutionEmail, validateStudentRosterIdentity } from '../services/departmentRules';
 
 const ROSTER_MIGRATION = 'attendance_roster_2026_09_v3_csv_credentials';
 const ADMIN_EMAIL = 'janarthanan.admin@bitsathy.ac.in';
@@ -12,6 +13,17 @@ export async function seedDatabase() {
   if (applied.length) {
     console.log('Attendance roster already loaded.');
     return;
+  }
+
+  const importedRoster = rosterRows as Array<Record<string, unknown>>;
+  const importedStudents = importedRoster.map(normalizeAttendanceRosterRow).filter((student) => student !== null);
+  for (const [index, student] of importedStudents.entries()) {
+    const rowNumber = index + 2;
+    const identity = validateStudentRosterIdentity(student.registerNo, student.studentEmail, student.department);
+    if (!identity.valid || !hasInstitutionEmail(student.studentEmail) || !hasInstitutionEmail(student.parentEmail) || !hasInstitutionEmail(student.mentorEmail)) {
+      throw new Error(`Bundled attendance roster row ${rowNumber} is invalid: ${!identity.valid ? identity.error : 'student, parent and mentor emails must end with @bitsathy.ac.in.'}`);
+    }
+    student.department = identity.name;
   }
 
   // Replace the old demo dataset once with the supplied attendance roster.
@@ -29,8 +41,6 @@ export async function seedDatabase() {
      VALUES ('ATTENDANCE', 'Semester Attendance', 0, 0, 'Mentor Team')`
   );
 
-  const importedRoster = rosterRows as Array<Record<string, unknown>>;
-  const importedStudents = importedRoster.map(normalizeAttendanceRosterRow).filter((student) => student !== null);
   const mentorAccounts = new Map<string, { name: string; key: string; email: string; id: string }>();
   const usedEmails = new Set<string>();
 
@@ -45,7 +55,7 @@ export async function seedDatabase() {
     mentorAccounts.set(student.mentorName, {
       name: student.mentorName,
       key: mentorKey,
-      email: student.mentorEmail || `mentor.${mentorKey.toLowerCase()}@attendance.local`,
+      email: student.mentorEmail,
       id: student.mentorId || `FAC_${mentorKey}`
     });
 
@@ -61,7 +71,7 @@ export async function seedDatabase() {
       [student.registerNo, student.name, student.registerNo, studentEmail, student.studentPhone, student.department, student.section, student.parentName, student.parentPhone, student.parentEmail, student.mentorName, student.registerNo]
     );
 
-    const parentEmail = student.parentEmail || `${parentId.toLowerCase()}@parent.local`;
+    const parentEmail = student.parentEmail;
     await runAsync(
       `INSERT INTO users (user_id, name, register_no, email, phone, role, department, section, mentor_name, password_hash)
        VALUES (?, ?, ?, ?, ?, 'PARENT', ?, ?, ?, ?)`,

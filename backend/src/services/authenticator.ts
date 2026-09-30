@@ -159,12 +159,16 @@ export async function verifyAuthenticatorChallenge(challengeId: string, code: st
       name, register_no, email, phone, role, department, section,
       parent_name, parent_phone, parent_email, mentor_name, password
     } = registration;
-    userId = String(register_no).toUpperCase();
-    const parentId = `PAR_${userId.slice(-4)}`;
+    const normalizedRegisterNo = String(register_no).trim().toUpperCase();
+    userId = role === 'FACULTY'
+      ? `FAC_${normalizedRegisterNo.replace(/[^A-Z0-9_-]/g, '_')}`
+      : normalizedRegisterNo;
+    const storedRegisterNo = role === 'FACULTY' ? normalizedRegisterNo : userId;
+    const parentId = `PAR_${userId}`;
     await runAsync(
       `INSERT INTO users (user_id, name, register_no, email, phone, role, department, section, parent_name, parent_phone, parent_email, mentor_name, password_hash)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, name, userId, String(email).toLowerCase(), phone, role, department, section || 'A', parent_name || 'N/A', parent_phone || 'N/A', parent_email || 'N/A', mentor_name || 'Mentor not assigned', password || 'password123']
+      [userId, name, storedRegisterNo, String(email).toLowerCase(), phone, role, department, section || 'A', parent_name || 'N/A', parent_phone || 'N/A', parent_email || 'N/A', mentor_name || 'Mentor not assigned', password || 'password123']
     );
     if (role === 'STUDENT') {
       await runAsync(
@@ -176,6 +180,12 @@ export async function verifyAuthenticatorChallenge(challengeId: string, code: st
       await runAsync(
         `INSERT INTO attendance_deficiency_records (student_id, course_code, total_conducted, total_attended, current_percentage, projected_percentage, classes_required_for_75, deficiency_status)
          VALUES (?, 'ATTENDANCE', 40, 36, 90.0, 91.0, 0, 'SAFE') ON CONFLICT(student_id, course_code) DO NOTHING`, [userId]
+      );
+    }
+    if (role === 'PARENT' && registration.linked_student_roll) {
+      await runAsync(
+        `UPDATE students SET parent_name = ?, parent_phone = ?, parent_email = ? WHERE upper(register_no) = ?`,
+        [name, phone, String(email).toLowerCase(), String(registration.linked_student_roll).toUpperCase()]
       );
     }
     await runAsync(

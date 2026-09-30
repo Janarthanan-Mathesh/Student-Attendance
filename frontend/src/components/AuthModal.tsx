@@ -10,6 +10,29 @@ interface AuthModalProps {
 
 type PersonaType = 'STUDENT' | 'FACULTY' | 'PARENT' | 'ADMIN';
 
+const studentDepartmentOptions = [
+  { code: 'CE', program: 'BE', name: 'Civil Engineering' },
+  { code: 'BM', program: 'BE', name: 'Biomedical Engineering' },
+  { code: 'CD', program: 'BE', name: 'Computer Science & Design' },
+  { code: 'CS', program: 'BE', name: 'Computer Science & Engineering' },
+  { code: 'EE', program: 'BE', name: 'Electrical & Electronics Engineering' },
+  { code: 'EC', program: 'BE', name: 'Electronics & Communication Engineering' },
+  { code: 'EI', program: 'BE', name: 'Electronics & Instrumentation Engineering' },
+  { code: 'IS', program: 'BE', name: 'Information Science & Engineering' },
+  { code: 'MZ', program: 'BE', name: 'Mechatronics Engineering' },
+  { code: 'ME', program: 'BE', name: 'Mechanical Engineering' },
+  { code: 'AD', program: 'B.Tech', name: 'Artificial Intelligence and Data Science' },
+  { code: 'AL', program: 'B.Tech', name: 'Artificial Intelligence and Machine Learning' },
+  { code: 'IT', program: 'B.Tech', name: 'Information Technology' },
+  { code: 'AG', program: 'B.Tech', name: 'Agricultural Engineering' },
+  { code: 'CT', program: 'B.Tech', name: 'Computer Technology' },
+  { code: 'BT', program: 'B.Tech', name: 'Biotechnology' },
+  { code: 'CB', program: 'B.Tech', name: 'Computer Science & Business Systems' },
+  { code: 'FD', program: 'B.Tech', name: 'Food Technology' },
+  { code: 'FT', program: 'B.Tech', name: 'Fashion Technology' },
+  { code: 'TT', program: 'B.Tech', name: 'Textile Technology' }
+];
+
 export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
   const [selectedPersona, setSelectedPersona] = useState<PersonaType | null>('STUDENT');
   const [activeTab, setActiveTab] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
@@ -23,6 +46,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
   const [regName, setRegName] = useState<string>('');
   const [regRegisterNo, setRegRegisterNo] = useState<string>('');
   const [regEmail, setRegEmail] = useState<string>('');
+  const [regStudentDepartment, setRegStudentDepartment] = useState<string>('AD');
   const [regPhone, setRegPhone] = useState<string>('');
   const [regDepartment, setRegDepartment] = useState<string>('Artificial Intelligence & Data Science');
   const [regSection, setRegSection] = useState<string>('A');
@@ -102,7 +126,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
       email: regEmail,
       phone: regPhone,
       role: selectedPersona,
-      department: regDepartment,
+      department: selectedPersona === 'STUDENT' ? regStudentDepartment : regDepartment,
       section: regSection,
       parent_name: regParentName,
       parent_phone: regParentPhone,
@@ -489,11 +513,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                           type="text"
                           required
                           value={regRegisterNo}
-                          onChange={(e) => setRegRegisterNo(e.target.value)}
-                          placeholder="Student register number"
+                          onChange={(e) => setRegRegisterNo(e.target.value.toUpperCase())}
+                          placeholder="7376232AD101"
                           className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-200"
                         />
+                        <p className="mt-1 text-[10px] text-slate-500">Format: 7376YY + 1 (BE) or 2 (B.Tech) + department code + 3 digits.</p>
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 font-medium mb-1">Department *</label>
+                      <select
+                        required
+                        value={regStudentDepartment}
+                        onChange={(e) => setRegStudentDepartment(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-200"
+                      >
+                        <optgroup label="BE — Bachelor of Engineering">
+                          {studentDepartmentOptions.filter((item) => item.program === 'BE').map((item) => <option key={item.code} value={item.code}>{item.code} — {item.name}</option>)}
+                        </optgroup>
+                        <optgroup label="B.Tech — Bachelor of Technology">
+                          {studentDepartmentOptions.filter((item) => item.program === 'B.Tech').map((item) => <option key={item.code} value={item.code}>{item.code} — {item.name}</option>)}
+                        </optgroup>
+                      </select>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -503,10 +545,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                           type="email"
                           required
                           value={regEmail}
-                          onChange={(e) => setRegEmail(e.target.value)}
-                          placeholder="janarthanan.m@institution.edu"
+                          onChange={(e) => {
+                            const email = e.target.value.toLowerCase();
+                            setRegEmail(email);
+                            const suffix = /\.([a-z]{2})\d{2}@bitsathy\.ac\.in$/i.exec(email);
+                            if (suffix && studentDepartmentOptions.some((item) => item.code === suffix[1].toUpperCase())) {
+                              setRegStudentDepartment(suffix[1].toUpperCase());
+                            }
+                          }}
+                          placeholder="janarthanan.ad23@bitsathy.ac.in"
                           className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-200"
                         />
+                        <p className="mt-1 text-[10px] text-slate-500">Use your @bitsathy.ac.in address with a department/year suffix, e.g. .ad23.</p>
                       </div>
 
                       <div>
@@ -601,7 +651,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                           required
                           value={regEmail}
                           onChange={(e) => setRegEmail(e.target.value)}
-                          placeholder="ramanathan@institution.edu"
+                          placeholder="ramanathan@bitsathy.ac.in"
                           className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-200"
                         />
                       </div>
@@ -652,6 +702,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                           className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-200"
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 font-medium mb-1">Institutional Email *</label>
+                      <input
+                        type="email"
+                        required
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value.toLowerCase())}
+                        placeholder="parent@bitsathy.ac.in"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-200"
+                      />
+                      <p className="mt-1 text-[10px] text-slate-500">Parent accounts also require an @bitsathy.ac.in address.</p>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
