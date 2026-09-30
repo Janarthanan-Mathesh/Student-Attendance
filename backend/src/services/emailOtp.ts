@@ -1,4 +1,5 @@
 import { createHash, randomInt, randomUUID, timingSafeEqual } from 'crypto';
+import nodemailer from 'nodemailer';
 import { getAsync, runAsync } from '../db/database';
 
 export type OtpPurpose = 'LOGIN' | 'REGISTER';
@@ -15,7 +16,7 @@ interface OtpChallenge {
 }
 
 function hashCode(code: string) {
-  const pepper = process.env.OTP_HASH_SECRET || process.env.RESEND_API_KEY;
+  const pepper = process.env.OTP_HASH_SECRET || process.env.GMAIL_APP_PASSWORD;
   if (!pepper) throw new Error('Email OTP is not configured on the server.');
   return createHash('sha256').update(`${pepper}:${code}`).digest('hex');
 }
@@ -26,28 +27,64 @@ function maskEmail(email: string) {
 }
 
 async function sendEmailOtp(email: string, code: string, purpose: OtpPurpose) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.OTP_FROM_EMAIL;
-  if (!apiKey || !from) throw new Error('Email OTP is not configured on the server.');
+  const username = process.env.GMAIL_USERNAME;
+  const appPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, '');
+  if (!username || !appPassword) throw new Error('Email OTP is not configured on the server.');
 
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      from,
-      to: [email],
-      subject: purpose === 'LOGIN' ? 'Your attendance portal sign-in code' : 'Verify your attendance portal email',
-      text: `Your verification code is ${code}. It expires in 10 minutes. If you did not request this code, you can ignore this email.`,
-      html: `<p>Your verification code is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${code}</p><p>This code expires in 10 minutes. If you did not request it, you can ignore this email.</p>`
-    })
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    requireTLS: true,
+    auth: { user: username, pass: appPassword }
   });
 
-  if (!response.ok) {
-    // Do not log or return provider details, which may contain personal data.
-    throw new Error('The verification email could not be sent. Check the email service configuration.');
+  const action = purpose === 'LOGIN' ? 'login' : 'register';
+  const actionLabel = purpose === 'LOGIN' ? 'Login' : 'Register';
+  const sentAt = new Intl.DateTimeFormat('en-IN', {
+    dateStyle: 'long',
+    timeStyle: 'short',
+    timeZone: 'Asia/Kolkata'
+  }).format(new Date());
+  const supportEmail = process.env.OTP_SUPPORT_EMAIL || 'your-support-email@example.com';
+  const supportPhone = process.env.OTP_SUPPORT_PHONE || 'your-support-phone-number';
+
+  try {
+    await transporter.sendMail({
+      from: username,
+      to: email,
+      subject: 'Your OTP to access Student Attendance Warning Automation App',
+      text: [
+        'Dear User,',
+        '',
+        `You are attempting to ${action} to your Student Attendance App Account.`,
+        `Your One-Time Password (OTP) for validating your Account ${actionLabel} generated at ${sentAt} is:`,
+        code,
+        '',
+        'This OTP is valid for 10 minutes and is not to be shared with anyone.',
+        `If you did not initiate this request, please contact ${supportEmail} / ${supportPhone}`,
+        '',
+        'Regards,',
+        'ADMIN Team',
+        '',
+        'This is an auto-generated email. Do not reply to this email.'
+      ].join('\n'),
+      html: `
+        <p>Dear User,</p>
+        <p>You are attempting to <strong>${action}</strong> to your Student Attendance App Account.</p>
+        <p>Your One-Time Password (OTP) for validating your Account <strong>${actionLabel}</strong> generated at ${sentAt} is:</p>
+        <p style="font-size:28px;font-weight:bold;letter-spacing:6px">${code}</p>
+        <p>This OTP is valid for 10 minutes and is not to be shared with anyone.</p>
+        <p>If you did not initiate this request, please contact ${supportEmail} / ${supportPhone}</p>
+        <p>Regards,<br><strong>ADMIN Team</strong></p>
+        <p><em>This is an auto-generated email. Do not reply to this email.</em></p>
+      `
+    });
+  } catch {
+    // Do not expose SMTP diagnostics or credentials to API callers.
+    throw new Error('The verification email could not be sent. Check the Gmail SMTP configuration.');
+  } finally {
+    transporter.close();
   }
 }
 
