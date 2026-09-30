@@ -658,14 +658,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
 
                       <div>
                         <label className="block text-slate-300 font-medium mb-1">Department *</label>
-                        <input
-                          type="text"
+                        <select
                           required
                           value={regDepartment}
                           onChange={(e) => setRegDepartment(e.target.value)}
-                          placeholder="Artificial Intelligence & Data Science"
                           className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-200"
-                        />
+                        >
+                          <optgroup label="BE — Bachelor of Engineering">
+                            {studentDepartmentOptions.filter((item) => item.program === 'BE').map((item) => <option key={item.code} value={item.name}>{item.code} — {item.name}</option>)}
+                          </optgroup>
+                          <optgroup label="B.Tech — Bachelor of Technology">
+                            {studentDepartmentOptions.filter((item) => item.program === 'B.Tech').map((item) => <option key={item.code} value={item.name}>{item.code} — {item.name}</option>)}
+                          </optgroup>
+                        </select>
                       </div>
                     </div>
                   </div>
