@@ -48,7 +48,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
   const [regEmail, setRegEmail] = useState<string>('');
   const [regStudentDepartment, setRegStudentDepartment] = useState<string>('AD');
   const [regPhone, setRegPhone] = useState<string>('');
-  const [regDepartment, setRegDepartment] = useState<string>('Artificial Intelligence & Data Science');
+  const [regDepartment, setRegDepartment] = useState<string>('Artificial Intelligence and Data Science');
   const [regSection, setRegSection] = useState<string>('A');
   const [regParentName, setRegParentName] = useState<string>('');
   const [regParentPhone, setRegParentPhone] = useState<string>('');
