@@ -7,16 +7,17 @@ import { submitLeaveOD, approveLeaveOD } from '../controllers/leaveODController'
 import { createCounselingLog, getCounselingLogs } from '../controllers/counselingController';
 import { getAuditLogs } from '../controllers/auditController';
 import { generatePDFNotice } from '../controllers/pdfController';
-import { registerUser, loginUser, verifyLoginOtp, updateProfile } from '../controllers/authController';
+import { registerUser, verifyAuthenticatorRegistration, loginUser, verifyLoginAuthenticator, updateProfile } from '../controllers/authController';
 import { bulkUploadExcel } from '../controllers/uploadController';
 
 const router = Router();
 
 // Auth & Profile & 2FA Routes
 router.post('/auth/register', registerUser);
+router.post('/auth/register/verify-authenticator', verifyAuthenticatorRegistration);
 router.post('/auth/login', loginUser);
 router.put('/auth/profile', updateProfile);
-router.post('/auth/login/verify-otp', verifyLoginOtp);
+router.post('/auth/login/verify-authenticator', verifyLoginAuthenticator);
 
 // Bulk Excel / CSV Upload Route
 router.post('/upload/bulk-excel', bulkUploadExcel);

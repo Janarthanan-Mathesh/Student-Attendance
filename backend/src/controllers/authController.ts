@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { getAsync, runAsync, allAsync } from '../db/database';
 import { z } from 'zod';
-import { createEmailOtp, verifyEmailOtp } from '../services/emailOtp';
+import { beginAuthenticatorLogin, beginAuthenticatorRegistration, verifyAuthenticatorChallenge } from '../services/authenticator';
 
 const RegisterSchema = z.object({
   name: z.string().min(2),
@@ -61,90 +61,31 @@ export async function registerUser(req: Request, res: Response) {
       });
     }
 
-    if (!body.otp_code) {
-      const otp = await createEmailOtp(email, 'REGISTER', null);
-      return res.json({ success: true, requires_otp: true, message: 'Enter the verification code sent to your email.', ...otp });
-    }
-    if (!/^\d{6}$/.test(String(body.otp_code)) || !body.challenge_id) {
-      return res.status(400).json({ success: false, error: 'Enter the six-digit code sent to your email.' });
-    }
-    await verifyEmailOtp(String(body.challenge_id), String(body.otp_code), 'REGISTER', email);
-
-    const userId = register_no.toUpperCase();
-    const parentId = `PAR_${userId.slice(-4)}`;
-
-    // Insert into users table
-    await runAsync(
-      `INSERT INTO users (user_id, name, register_no, email, phone, role, department, section, parent_name, parent_phone, parent_email, mentor_name, password_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        userId,
-        name,
-        register_no.toUpperCase(),
-        email.toLowerCase(),
-        phone,
-        role,
-        department,
-        section || 'A',
-        parent_name || 'N/A',
-        parent_phone || 'N/A',
-        parent_email || 'N/A',
-        mentor_name || 'Mentor not assigned',
-        password || 'password123'
-      ]
-    );
-
-    // If student, also insert into students table and create deficiency records
-    if (role === 'STUDENT') {
-      await runAsync(
-        `INSERT INTO students (student_id, name, register_no, email, phone, parent_id, parent_name, parent_phone, parent_email, department, section, mentor_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(student_id) DO UPDATE SET name = excluded.name, email = excluded.email, phone = excluded.phone`,
-        [
-          userId,
-          name,
-          register_no.toUpperCase(),
-          email.toLowerCase(),
-          phone,
-          parentId,
-          parent_name || 'Parent/Guardian',
-          parent_phone || phone,
-          parent_email || email,
-          department,
-          section || 'A',
-          mentor_name || 'Mentor not assigned'
-        ]
-      );
-
-      // Initialize initial safe deficiency records for core courses
-      const defaultCourses = ['ATTENDANCE'];
-      for (const code of defaultCourses) {
-        await runAsync(
-          `INSERT INTO attendance_deficiency_records (student_id, course_code, total_conducted, total_attended, current_percentage, projected_percentage, classes_required_for_75, deficiency_status)
-           VALUES (?, ?, 40, 36, 90.0, 91.0, 0, 'SAFE')
-           ON CONFLICT(student_id, course_code) DO NOTHING`,
-          [userId, code]
-        );
-      }
-    }
-
-    // Audit log
-    await runAsync(
-      `INSERT INTO audit_logs (action_type, performed_by, target_id, details) VALUES (?, ?, ?, ?)`,
-      ['USER_REGISTRATION', name, userId, `Registered first-time account with role ${role}`]
-    );
-
-    const newUser = await getAsync<any>(`SELECT * FROM users WHERE user_id = ?`, [userId]);
-    if (!newUser) throw new Error('The account was created but could not be loaded.');
-    const { password_hash: _passwordHash, ...safeUser } = newUser;
-
+    const challenge = await beginAuthenticatorRegistration({
+      ...parse.data,
+      email: email.trim().toLowerCase(),
+      register_no: register_no.trim().toUpperCase()
+    });
     return res.json({
       success: true,
-      message: 'Registration successful! Welcome to Attendance Tracker.',
-      user: safeUser
+      requires_authenticator_setup: true,
+      message: 'Scan this QR code with an authenticator app, then enter its six-digit code.',
+      ...challenge
     });
   } catch (err: any) {
-    const status = err.message.includes('wait one minute') ? 429 : err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') || err.message.includes('does not match') ? 400 : err.message.includes('Email OTP is not configured') || err.message.includes('verification email could not be sent') ? 503 : 500;
+    const status = err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') ? 400 : err.message.includes('Authenticator setup is not configured') ? 503 : 500;
+    return res.status(status).json({ success: false, error: err.message });
+  }
+}
+
+export async function verifyAuthenticatorRegistration(req: Request, res: Response) {
+  try {
+    const parsed = z.object({ challenge_id: z.string().uuid(), otp_code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ success: false, error: 'Enter the six-digit code from your authenticator app.' });
+    const user = await verifyAuthenticatorChallenge(parsed.data.challenge_id, parsed.data.otp_code);
+    return res.json({ success: true, message: 'Authenticator verified. Registration complete.', user });
+  } catch (err: any) {
+    const status = err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') ? 400 : 500;
     return res.status(status).json({ success: false, error: err.message });
   }
 }
@@ -174,33 +115,28 @@ export async function loginUser(req: Request, res: Response) {
       });
     }
 
-    const otp = await createEmailOtp(user.email, 'LOGIN', user.user_id);
+    const authenticator = await beginAuthenticatorLogin(user.user_id, user.email);
 
     return res.json({
       success: true,
-      requires_otp: true,
-      message: 'Enter the verification code sent to your account email.',
-      ...otp
+      requires_otp: !authenticator.requires_authenticator_setup,
+      message: authenticator.requires_authenticator_setup
+        ? 'Set up an authenticator app, then enter its six-digit code.'
+        : 'Enter the current six-digit code from your authenticator app.',
+      ...authenticator
     });
   } catch (err: any) {
-    const status = err.message.includes('wait one minute') ? 429 : err.message.includes('Email OTP is not configured') || err.message.includes('verification email could not be sent') ? 503 : 500;
+    const status = err.message.includes('Authenticator setup is not configured') ? 503 : 500;
     return res.status(status).json({ success: false, error: err.message });
   }
 }
 
-export async function verifyLoginOtp(req: Request, res: Response) {
+export async function verifyLoginAuthenticator(req: Request, res: Response) {
   try {
     const parsed = z.object({ challenge_id: z.string().uuid(), otp_code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ success: false, error: 'Enter the six-digit code sent to your email.' });
-    const challenge = await verifyEmailOtp(parsed.data.challenge_id, parsed.data.otp_code, 'LOGIN');
-    const user = await getAsync<any>(`SELECT * FROM users WHERE user_id = ? LIMIT 1`, [challenge.user_id]);
-    if (!user) return res.status(404).json({ success: false, error: 'Account not found.' });
-    await runAsync(
-      `INSERT INTO audit_logs (action_type, performed_by, target_id, details) VALUES (?, ?, ?, ?)`,
-      ['USER_LOGIN', user.name, user.user_id, `User logged in under role ${user.role} after email OTP verification`]
-    );
-    const { password_hash: _passwordHash, ...safeUser } = user;
-    return res.json({ success: true, message: `Welcome back, ${user.name}!`, user: safeUser });
+    if (!parsed.success) return res.status(400).json({ success: false, error: 'Enter the six-digit code from your authenticator app.' });
+    const user = await verifyAuthenticatorChallenge(parsed.data.challenge_id, parsed.data.otp_code);
+    return res.json({ success: true, message: `Welcome back, ${user.name}!`, user });
   } catch (err: any) {
     const status = err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') ? 400 : 500;
     return res.status(status).json({ success: false, error: err.message });

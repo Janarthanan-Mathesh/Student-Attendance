@@ -41,15 +41,22 @@ export function allAsync<T = any>(sql: string, params: any[] = []): Promise<T[]>
 
 export async function initDatabase() {
   await runAsync(`
-    CREATE TABLE IF NOT EXISTS email_otp_challenges (
+    CREATE TABLE IF NOT EXISTS user_authenticators (
+      user_id TEXT PRIMARY KEY,
+      secret_encrypted TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
+    );
+  `);
+
+  await runAsync(`
+    CREATE TABLE IF NOT EXISTS authenticator_challenges (
       challenge_id TEXT PRIMARY KEY,
-      purpose TEXT NOT NULL,
       user_id TEXT,
-      email TEXT NOT NULL,
-      code_hash TEXT NOT NULL,
+      purpose TEXT NOT NULL CHECK (purpose IN ('LOGIN', 'LOGIN_SETUP', 'REGISTER')),
+      secret_encrypted TEXT NOT NULL,
+      registration_json TEXT,
       expires_at INTEGER NOT NULL,
-      attempts INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL
+      attempts INTEGER NOT NULL DEFAULT 0
     );
   `);
 

@@ -29,11 +29,11 @@ export async function registerUserAPI(data: any) {
   return await res.json();
 }
 
-export async function verifyRegistrationOTPAPI(data: any, challenge_id: string, otp_code: string) {
-  const res = await fetch(`${API_BASE}/auth/register`, {
+export async function verifyRegistrationOTPAPI(challenge_id: string, otp_code: string) {
+  const res = await fetch(`${API_BASE}/auth/register/verify-authenticator`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...data, challenge_id, otp_code })
+    body: JSON.stringify({ challenge_id, otp_code })
   });
   return await res.json();
 }
@@ -57,7 +57,7 @@ export async function updateProfileAPI(data: any) {
 }
 
 export async function verifyLoginOTPAPI(challenge_id: string, otp_code: string) {
-  const res = await fetch(`${API_BASE}/auth/login/verify-otp`, {
+  const res = await fetch(`${API_BASE}/auth/login/verify-authenticator`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ challenge_id, otp_code })
