@@ -1,0 +1,10 @@
+# Antigravity Workspace Rules & Conventions
+
+Stack: React 19 (Vite), Node.js (Express/TypeScript), SQLite / PostgreSQL Engine, Tailwind CSS, BullMQ Async Task Queue, Scikit-Learn / FastAPI ML.
+Conventions:
+- TypeScript strict mode with explicit typing across frontend and backend.
+- Zod schema validation for all API request payloads and query parameters.
+- Modular microservices for notification workers and ML forecasting engine.
+- Dynamic Risk Categorization: Green (>80%), Amber (75-80%), Red (65-74.9%), Critical (<65%).
+- Immutable audit log records for all administrative, evaluation, and dispatch actions.
+- QR-verified PDF deficiency generation with cryptographic signature verification.
