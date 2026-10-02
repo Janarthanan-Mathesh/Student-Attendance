@@ -34,68 +34,65 @@ export async function generateDeficiencyPDF(data: PDFNoticeData): Promise<Buffer
     doc.on('end', () => resolve(Buffer.concat(buffers)));
     doc.on('error', (err) => reject(err));
 
-    // Document Header
-    doc.fillColor('#1E293B').fontSize(18).text('OFFICIAL ACADEMIC DEFICIENCY NOTICE', { align: 'center' });
-    doc.fontSize(10).fillColor('#64748B').text('INSTITUTIONAL ACADEMIC ACCREDITATION & COMPLIANCE BOARD', { align: 'center' });
-    doc.moveDown(0.5);
-    doc.strokeColor('#CBD5E1').lineWidth(1).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-    doc.moveDown(1);
+    const left = 50;
+    const right = 545;
+    const width = right - left;
 
-    // Warning Banner based on status
+    // Use fixed, non-overlapping blocks so PDFKit's text flow cannot collide
+    // with shapes or images when a name/course title wraps onto another line.
+    doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(17)
+      .text('OFFICIAL ACADEMIC DEFICIENCY NOTICE', left, 48, { width, align: 'center' });
+    doc.fillColor('#64748B').font('Helvetica').fontSize(9)
+      .text('INSTITUTIONAL ACADEMIC ACCREDITATION & COMPLIANCE BOARD', left, 74, { width, align: 'center' });
+    doc.strokeColor('#CBD5E1').lineWidth(1).moveTo(left, 96).lineTo(right, 96).stroke();
+
     const isCritical = data.deficiency_status === 'CRITICAL_DETENTION';
     const bannerColor = isCritical ? '#EF4444' : '#F59E0B';
-    const bannerText = isCritical 
+    const bannerText = isCritical
       ? 'CRITICAL DEFICIENCY NOTICE - MANDATORY PARENT INTERVENTION & DETENTION WARNING'
       : 'FORMAL DEFICIENCY WARNING - IMMEDIATE ATTENDANCE RECOVERY REQUIRED';
 
-    doc.rect(50, doc.y, 500, 28).fill(bannerColor);
-    doc.fillColor('#FFFFFF').fontSize(10).text(bannerText, 55, doc.y - 20, { width: 490, align: 'center' });
-    doc.moveDown(1.5);
+    doc.roundedRect(left, 112, width, 34, 5).fill(bannerColor);
+    doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(9)
+      .text(bannerText, left + 10, 122, { width: width - 20, align: 'center', height: 18, ellipsis: true });
 
-    // Student & Parent Information Grid
-    doc.fillColor('#0F172A').fontSize(12).text('Student & Record Details:', { underline: true });
-    doc.moveDown(0.5);
+    const section = (title: string, y: number) => {
+      doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(11).text(title, left, y);
+      doc.strokeColor('#E2E8F0').lineWidth(1).moveTo(left, y + 17).lineTo(right, y + 17).stroke();
+    };
+    const detail = (label: string, value: string, x: number, y: number, cellWidth: number) => {
+      doc.fillColor('#64748B').font('Helvetica').fontSize(8).text(label.toUpperCase(), x, y, { width: cellWidth });
+      doc.fillColor('#1E293B').font('Helvetica-Bold').fontSize(10).text(value || 'N/A', x, y + 12, { width: cellWidth, height: 26, ellipsis: true });
+    };
 
-    doc.fontSize(10).fillColor('#334155');
-    doc.text(`Student Name: ${data.student_name}`);
-    doc.text(`Register No / ID: ${data.register_no}`);
-    doc.text(`Department: ${data.department}`);
-    doc.text(`Parent/Guardian Name: ${data.parent_name}`);
-    doc.moveDown(0.8);
+    section('STUDENT & RECORD DETAILS', 164);
+    detail('Student Name', data.student_name, left + 8, 190, 235);
+    detail('Register Number', data.register_no, left + 255, 190, 230);
+    detail('Department', data.department, left + 8, 232, 235);
+    detail('Parent / Guardian', data.parent_name, left + 255, 232, 230);
 
-    // Academic & Attendance Metrics
-    doc.fillColor('#0F172A').fontSize(12).text('Course & Deficiency Metrics:', { underline: true });
-    doc.moveDown(0.5);
+    section('COURSE & ATTENDANCE METRICS', 282);
+    detail('Course Code', data.course_code, left + 8, 308, 150);
+    detail('Course Title', data.course_name, left + 174, 308, 310);
+    detail('Current Attendance', `${data.current_percentage}%`, left + 8, 350, 150);
+    detail('Required Threshold', '75.00%', left + 174, 350, 145);
+    detail('Sessions Needed', `${data.classes_required} sessions`, left + 338, 350, 145);
+    detail('Deficiency Classification', data.deficiency_status.replace(/_/g, ' '), left + 8, 392, width - 16);
 
-    doc.fontSize(10).fillColor('#334155');
-    doc.text(`Course Code & Title: ${data.course_code} - ${data.course_name}`);
-    doc.text(`Current Attendance Percentage: ${data.current_percentage}%`);
-    doc.text(`Mandatory Eligibility Threshold: 75.00%`);
-    doc.text(`Minimum Consecutive Classes Required to Reach Safe Zone: ${data.classes_required} Sessions`);
-    doc.text(`Deficiency Classification: ${data.deficiency_status}`);
-    doc.moveDown(1.5);
+    const boxY = 450;
+    doc.roundedRect(left, boxY, width, 104, 6).fillAndStroke('#F8FAFC', '#CBD5E1');
+    doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(10).text('DIGITAL VERIFICATION', left + 14, boxY + 14);
+    doc.fillColor('#475569').font('Helvetica').fontSize(8)
+      .text(`Security signature: ${digitalSignature}`, left + 14, boxY + 36, { width: 350 })
+      .text(`Issued on: ${data.issued_at}`, left + 14, boxY + 52, { width: 350 })
+      .text('Scan the QR code to verify this notice.', left + 14, boxY + 68, { width: 350 });
+    doc.image(qrImageBuffer, right - 88, boxY + 10, { width: 78, height: 78 });
 
-    // Compliance & Digital Verification Section
-    doc.rect(50, doc.y, 500, 100).fillAndStroke('#F8FAFC', '#E2E8F0');
-    
-    const boxY = doc.y - 95;
-    doc.fillColor('#0F172A').fontSize(10).text('Digital Verification & Sign-Off:', 60, boxY);
-    doc.fontSize(8).fillColor('#475569').text(`Digital Security Signature Hash: ${digitalSignature}`, 60, boxY + 18);
-    doc.text(`Date of Issuance: ${data.issued_at}`, 60, boxY + 30);
-    doc.text('Scan the QR code to verify validity on the institutional portal.', 60, boxY + 42);
-
-    // Embed QR Code Image
-    doc.image(qrImageBuffer, 430, boxY + 5, { width: 80, height: 80 });
-
-    doc.moveDown(3);
-
-    // Footer Signatures
-    doc.fillColor('#0F172A').fontSize(10);
-    doc.text('_______________________', 60, doc.y);
-    doc.text('Head of Department', 60, doc.y + 15);
-
-    doc.text('_______________________', 360, doc.y - 15);
-    doc.text('Parent/Guardian Signature', 360, doc.y + 15);
+    doc.strokeColor('#94A3B8').lineWidth(1).moveTo(left + 8, 625).lineTo(left + 205, 625).stroke();
+    doc.moveTo(left + 286, 625).lineTo(right - 8, 625).stroke();
+    doc.fillColor('#334155').font('Helvetica').fontSize(9)
+      .text('Head of Department', left + 8, 633, { width: 197, align: 'center' })
+      .text('Parent / Guardian Signature', left + 286, 633, { width: 197, align: 'center' });
 
     doc.end();
   });

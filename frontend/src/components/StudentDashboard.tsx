@@ -48,6 +48,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
   const [odDocument, setOdDocument] = useState<File | null>(null);
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().slice(0, 10));
   const [odMessage, setOdMessage] = useState<string | null>(null);
+  const [odSubmitting, setOdSubmitting] = useState(false);
 
   // Dispute Drawer State
   const [showDisputeDrawer, setShowDisputeDrawer] = useState<boolean>(false);
@@ -96,6 +97,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
       return;
     }
 
+    setOdSubmitting(true);
+    try {
     const res = await submitLeaveODAPI({
       student_id: student.student_id,
       course_code: selectedCourse.course_code,
@@ -114,6 +117,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
         setShowODDrawer(false);
         setOdMessage(null);
       }, 2000);
+    } else {
+      const error = Array.isArray(res.error) ? res.error.map((item: any) => item.message).join(' ') : res.error;
+      setOdMessage(error || 'The request could not be submitted. Please try again.');
+    }
+    } catch (error) {
+      setOdMessage(error instanceof Error ? error.message : 'Document upload failed. Please try again.');
+    } finally {
+      setOdSubmitting(false);
     }
   };
 
@@ -229,15 +240,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
             <p className="text-2xl font-extrabold text-rose-400">{(student.courses || []).reduce((sum, course) => sum + course.total_conducted - course.total_attended, 0)}</p>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="text-slate-400"><tr><th className="py-2">Course</th><th className="py-2">Present</th><th className="py-2">Absent</th><th className="py-2">Conducted</th></tr></thead>
-            <tbody className="divide-y divide-slate-800">
-              {(student.courses || []).map((course) => <tr key={course.course_code}>
-                <td className="py-2 text-slate-200">{course.course_code}</td>
-                <td className="py-2 text-emerald-300">{course.total_attended}</td>
-                <td className="py-2 text-rose-300">{course.total_conducted - course.total_attended}</td>
-                <td className="py-2 text-slate-300">{course.total_conducted}</td>
+        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/30">
+          <table className="w-full min-w-[520px] text-left text-xs">
+            <thead className="bg-slate-900/80 text-[10px] uppercase tracking-wider text-slate-400">
+              <tr>
+                <th scope="col" className="px-4 py-3 font-semibold">Course</th>
+                <th scope="col" className="px-4 py-3 text-center font-semibold">Present</th>
+                <th scope="col" className="px-4 py-3 text-center font-semibold">Absent</th>
+                <th scope="col" className="px-4 py-3 text-center font-semibold">Conducted</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/80">
+              {(student.courses || []).map((course) => <tr key={course.course_code} className="transition-colors hover:bg-slate-900/60">
+                <th scope="row" className="px-4 py-3 font-semibold text-slate-200">{course.course_code}<span className="block mt-1 text-[10px] font-normal text-slate-500">{course.course_name || 'Course attendance'}</span></th>
+                <td className="px-4 py-3 text-center"><span className="inline-flex min-w-12 justify-center rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 font-bold tabular-nums text-emerald-300">{course.total_attended}</span></td>
+                <td className="px-4 py-3 text-center"><span className="inline-flex min-w-12 justify-center rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-1.5 font-bold tabular-nums text-rose-300">{course.total_conducted - course.total_attended}</span></td>
+                <td className="px-4 py-3 text-center"><span className="inline-flex min-w-12 justify-center rounded-lg border border-slate-700 bg-slate-800/70 px-3 py-1.5 font-bold tabular-nums text-slate-200">{course.total_conducted}</span></td>
               </tr>)}
             </tbody>
           </table>
@@ -525,9 +543,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold shadow-lg shadow-cyan-600/30"
+                  disabled={odSubmitting}
+                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-60 text-white font-semibold shadow-lg shadow-cyan-600/30"
                 >
-                  Submit Request
+                  {odSubmitting ? 'Uploading…' : 'Submit Request'}
                 </button>
               </div>
             </form>
