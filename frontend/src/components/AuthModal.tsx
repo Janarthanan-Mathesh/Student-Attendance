@@ -64,8 +64,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
   // Authenticator app verification state
   const [loginOtpStep, setLoginOtpStep] = useState<boolean>(false);
   const [loginChallengeId, setLoginChallengeId] = useState<string>('');
-  const [loginAuthenticatorQr, setLoginAuthenticatorQr] = useState<string>('');
-  const [loginAuthenticatorKey, setLoginAuthenticatorKey] = useState<string>('');
   const [otpCodeInput, setOtpCodeInput] = useState<string>('');
   const [registerOtpStep, setRegisterOtpStep] = useState<boolean>(false);
   const [registerChallengeId, setRegisterChallengeId] = useState<string>('');
@@ -81,10 +79,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
 
     try {
       const res = await loginUserAPI(loginIdentifier, loginPassword, selectedPersona || undefined);
-      if (res.success && (res.requires_otp || res.requires_authenticator_setup) && res.challenge_id) {
+      if (res.success && res.requires_otp && res.challenge_id) {
         setLoginChallengeId(res.challenge_id);
-        setLoginAuthenticatorQr(res.qr_data_url || '');
-        setLoginAuthenticatorKey(res.setup_key || '');
         setLoginOtpStep(true);
         setOtpCodeInput('');
       } else if (res.success && res.user) {
@@ -376,13 +372,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                 <form onSubmit={handleVerifyOTP} className="space-y-4">
                   <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-2">
                     <h4 className="font-bold text-white">Authenticator verification</h4>
-                    {loginAuthenticatorQr ? <>
-                      <p className="text-xs text-slate-300">Scan this QR code with Google Authenticator, Microsoft Authenticator, or another TOTP app. Then enter the code shown in that app.</p>
-                      <img src={loginAuthenticatorQr} alt="Authenticator setup QR code" className="mx-auto w-48 rounded-lg bg-white p-2" />
-                      <p className="text-xs text-slate-300">If you are viewing this on the same phone, choose “Enter setup key” in the authenticator app and use:</p>
-                      <code className="block break-all rounded bg-slate-900 p-2 text-center text-xs text-cyan-300">{loginAuthenticatorKey}</code>
-                      <p className="text-xs text-slate-400">Keep this authenticator on your phone. You will use its changing code each time you log in.</p>
-                    </> : <p className="text-xs text-slate-300">Enter the current six-digit code from your authenticator app.</p>}
+                    <p className="text-xs text-slate-300">Open the authenticator app you linked during registration and enter its current six-digit code.</p>
                   </div>
                   <div>
                     <label className="block text-slate-300 font-medium mb-1">Authenticator code</label>
@@ -400,7 +390,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                   </div>
                   {loginError && <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs">{loginError}</div>}
                   <button type="submit" className="w-full py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg">Verify and Sign In</button>
-                  <button type="button" onClick={() => { setLoginOtpStep(false); setLoginChallengeId(''); setLoginAuthenticatorQr(''); setLoginAuthenticatorKey(''); setLoginError(null); }} className="w-full py-2 text-slate-400 hover:text-white text-xs">Back to login</button>
+                  <button type="button" onClick={() => { setLoginOtpStep(false); setLoginChallengeId(''); setLoginError(null); }} className="w-full py-2 text-slate-400 hover:text-white text-xs">Back to login</button>
                 </form>
               ) : <div className="space-y-4">
                 

@@ -99,10 +99,10 @@ export async function verifyAuthenticatorRegistration(req: Request, res: Respons
   try {
     const parsed = z.object({ challenge_id: z.string().uuid(), otp_code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ success: false, error: 'Enter the six-digit code from your authenticator app.' });
-    const user = await verifyAuthenticatorChallenge(parsed.data.challenge_id, parsed.data.otp_code);
+    const user = await verifyAuthenticatorChallenge(parsed.data.challenge_id, parsed.data.otp_code, 'REGISTER');
     return res.json({ success: true, message: 'Authenticator verified. Registration complete.', user });
   } catch (err: any) {
-    const status = err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') ? 400 : 500;
+    const status = err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') || err.message.includes('not valid for this flow') ? 400 : 500;
     return res.status(status).json({ success: false, error: err.message });
   }
 }
@@ -136,7 +136,7 @@ export async function loginUser(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: 'This account must use an institutional @bitsathy.ac.in email. Contact the administrator to correct the roster email.' });
     }
 
-    const authenticator = await beginAuthenticatorLogin(user.user_id, user.email);
+    const authenticator = await beginAuthenticatorLogin(user.user_id);
 
     return res.json({
       success: true,
@@ -147,7 +147,7 @@ export async function loginUser(req: Request, res: Response) {
       ...authenticator
     });
   } catch (err: any) {
-    const status = err.message.includes('Authenticator setup is not configured') ? 503 : 500;
+    const status = err.message.includes('Authenticator setup is not configured') ? 503 : err.message.includes('No authenticator is registered') ? 403 : 500;
     return res.status(status).json({ success: false, error: err.message });
   }
 }
@@ -156,10 +156,10 @@ export async function verifyLoginAuthenticator(req: Request, res: Response) {
   try {
     const parsed = z.object({ challenge_id: z.string().uuid(), otp_code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ success: false, error: 'Enter the six-digit code from your authenticator app.' });
-    const user = await verifyAuthenticatorChallenge(parsed.data.challenge_id, parsed.data.otp_code);
+    const user = await verifyAuthenticatorChallenge(parsed.data.challenge_id, parsed.data.otp_code, 'LOGIN');
     return res.json({ success: true, message: `Welcome back, ${user.name}!`, user });
   } catch (err: any) {
-    const status = err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') ? 400 : 500;
+    const status = err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') || err.message.includes('not valid for this flow') ? 400 : 500;
     return res.status(status).json({ success: false, error: err.message });
   }
 }

@@ -116,7 +116,7 @@ export async function beginAuthenticatorRegistration(registration: any) {
   return prepareChallenge({ userId: null, purpose: 'REGISTER', secret, registration, email: registration.email });
 }
 
-export async function beginAuthenticatorLogin(userId: string, email: string) {
+export async function beginAuthenticatorLogin(userId: string) {
   const configured = await getAsync<{ secret_encrypted: string }>(
     `SELECT secret_encrypted FROM user_authenticators WHERE user_id = ? LIMIT 1`, [userId]
   );
@@ -129,18 +129,23 @@ export async function beginAuthenticatorLogin(userId: string, email: string) {
     );
     return { challenge_id: challengeId, requires_authenticator_setup: false, expires_in_seconds: CHALLENGE_MS / 1000 };
   }
-  const secret = encodeBase32(randomBytes(20));
-  const challenge = await prepareChallenge({ userId, purpose: 'LOGIN_SETUP', secret, email });
-  return { ...challenge, requires_authenticator_setup: true };
+  throw new Error('No authenticator is registered for this account. Contact your administrator for account recovery; login cannot enroll a new authenticator.');
 }
 
-export async function verifyAuthenticatorChallenge(challengeId: string, code: string) {
+export async function verifyAuthenticatorChallenge(
+  challengeId: string,
+  code: string,
+  expectedPurpose?: AuthenticatorChallenge['purpose']
+) {
   const challenge = await getAsync<AuthenticatorChallenge>(
     `SELECT * FROM authenticator_challenges WHERE challenge_id = ? LIMIT 1`, [challengeId]
   );
   if (!challenge || challenge.expires_at <= Date.now()) {
     if (challenge) await runAsync(`DELETE FROM authenticator_challenges WHERE challenge_id = ?`, [challengeId]);
     throw new Error('Authenticator challenge expired. Start again.');
+  }
+  if (expectedPurpose && challenge.purpose !== expectedPurpose) {
+    throw new Error('Authenticator challenge is not valid for this flow. Start again.');
   }
   if (challenge.attempts >= 5) {
     await runAsync(`DELETE FROM authenticator_challenges WHERE challenge_id = ?`, [challengeId]);
