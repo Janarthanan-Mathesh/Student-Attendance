@@ -16,6 +16,7 @@ const RegisterSchema = z.object({
   parent_phone: z.string().optional(),
   parent_email: z.string().optional(),
   mentor_name: z.string().optional().default('Mentor not assigned'),
+  mentor_id: z.string().optional(),
   password: z.string().min(4)
 });
 
@@ -36,6 +37,7 @@ export async function registerUser(req: Request, res: Response) {
 
     const { register_no, email, role } = parse.data;
     let department = parse.data.department;
+    let mentorName = parse.data.mentor_name;
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!hasInstitutionEmail(normalizedEmail)) {
@@ -46,6 +48,17 @@ export async function registerUser(req: Request, res: Response) {
       const identity = validateStudentDepartmentIdentity(register_no, normalizedEmail, department);
       if (!identity.valid) return res.status(400).json({ success: false, error: identity.error });
       department = identity.name;
+
+      const mentorId = parse.data.mentor_id?.trim().toUpperCase();
+      if (!mentorId) return res.status(400).json({ success: false, error: 'Select a faculty mentor from the list.' });
+      const mentor = await getAsync<{ name: string }>(
+        `SELECT name FROM users WHERE role = 'FACULTY' AND upper(register_no) = ? LIMIT 1`,
+        [mentorId]
+      );
+      if (!mentor) return res.status(400).json({ success: false, error: 'The selected faculty mentor is not available in the faculty roster. Contact the administrator.' });
+      // Store the faculty account's canonical name because mentor dashboards
+      // use this value to find their assigned students.
+      mentorName = mentor.name;
     }
 
     let lookupRegisterNo = register_no.trim().toUpperCase();
@@ -94,6 +107,7 @@ export async function registerUser(req: Request, res: Response) {
       ...parse.data,
       email: normalizedEmail,
       register_no: lookupRegisterNo,
+      mentor_name: mentorName,
       linked_student_roll: role === 'PARENT' ? register_no.trim().toUpperCase() : undefined,
       department
     });

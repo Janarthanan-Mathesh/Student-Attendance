@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
 import { loginUserAPI, registerUserAPI, verifyLoginOTPAPI, verifyRegistrationOTPAPI } from '../lib/api';
+import mentors from '../data/mentors.json';
 import { User, Users, Smartphone, ShieldCheck, LogIn, UserPlus, Mail, Phone, Lock, Building, BookOpen, CheckCircle, AlertCircle, ArrowLeft, Globe, Eye, EyeOff } from 'lucide-react';
 
 interface AuthModalProps {
@@ -55,6 +56,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
   const [regParentPhone, setRegParentPhone] = useState<string>('');
   const [regParentEmail, setRegParentEmail] = useState<string>('');
   const [regMentorName, setRegMentorName] = useState<string>('');
+  const [regMentorId, setRegMentorId] = useState<string>('');
   const [regLangPref, setRegLangPref] = useState<string>('EN');
   const [regAdminKey, setRegAdminKey] = useState<string>('');
   const [regPassword, setRegPassword] = useState<string>('');
@@ -119,6 +121,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
     setRegError(null);
     setRegSuccessMsg(null);
 
+    const selectedMentor = selectedPersona === 'STUDENT'
+      ? mentors.find((mentor) => mentor.faculty_id === regMentorId && mentor.label === regMentorName)
+      : undefined;
+    if (selectedPersona === 'STUDENT' && !selectedMentor) {
+      setRegError('Select a faculty mentor from the searchable list.');
+      return;
+    }
+
     const payload = {
       name: regName,
       register_no: regRegisterNo,
@@ -131,6 +141,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
       parent_phone: regParentPhone,
       parent_email: regParentEmail,
       mentor_name: regMentorName,
+      mentor_id: selectedMentor?.faculty_id,
       password: regPassword
     };
 
@@ -597,15 +608,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                             className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-200"
                           />
                         </div>
-                        <div>
-                          <label className="block text-slate-400 text-[10px] mb-0.5">Faculty Mentor</label>
+                        <div className="sm:col-span-3">
+                          <label htmlFor="student-faculty-mentor" className="block text-slate-400 text-[10px] mb-0.5">Faculty Mentor *</label>
                           <input
-                            type="text"
+                            id="student-faculty-mentor"
+                            type="search"
+                            role="combobox"
+                            aria-autocomplete="list"
+                            list="faculty-mentor-options"
+                            required
+                            autoComplete="off"
                             value={regMentorName}
-                            onChange={(e) => setRegMentorName(e.target.value)}
-                            placeholder="Mentor name"
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              const match = mentors.find((mentor) => mentor.label === value);
+                              setRegMentorName(value);
+                              setRegMentorId(match?.faculty_id || '');
+                            }}
+                            placeholder="Search by faculty ID or name (e.g. AD2241 - Dr. KODIESWARI A)"
                             className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-200"
                           />
+                          <datalist id="faculty-mentor-options">
+                            {mentors.map((mentor) => <option key={mentor.faculty_id} value={mentor.label} />)}
+                          </datalist>
                         </div>
                       </div>
                     </div>
