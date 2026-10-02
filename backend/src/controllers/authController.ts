@@ -26,6 +26,30 @@ const LoginSchema = z.object({
   role: z.enum(['STUDENT', 'FACULTY', 'PARENT', 'ADMIN']).optional()
 });
 
+const DEMO_ACCOUNTS: Record<string, { password: string; role: 'STUDENT' | 'FACULTY' | 'PARENT' }> = {
+  'student@123': { password: 'student@123', role: 'STUDENT' },
+  'mentor@123': { password: 'mentor@123', role: 'FACULTY' },
+  'parent@123': { password: 'parent@123', role: 'PARENT' }
+};
+
+async function getDemoAccount(role: 'STUDENT' | 'FACULTY' | 'PARENT') {
+  if (role === 'STUDENT') {
+    return getAsync<any>(`SELECT * FROM users WHERE role = 'STUDENT' ORDER BY id ASC LIMIT 1`);
+  }
+  if (role === 'FACULTY') {
+    return getAsync<any>(
+      `SELECT u.* FROM users u
+       WHERE u.role = 'FACULTY' AND EXISTS (SELECT 1 FROM students s WHERE s.mentor_name = u.name)
+       ORDER BY u.id ASC LIMIT 1`
+    );
+  }
+  return getAsync<any>(
+    `SELECT u.* FROM users u
+     WHERE u.role = 'PARENT' AND EXISTS (SELECT 1 FROM students s WHERE s.parent_id = u.user_id)
+     ORDER BY u.id ASC LIMIT 1`
+  );
+}
+
 export async function registerUser(req: Request, res: Response) {
   try {
     const body = req.body || {};
@@ -143,6 +167,21 @@ export async function loginUser(req: Request, res: Response) {
     }
 
     const { identifier, password, role } = parse.data;
+
+    const normalizedIdentifier = identifier.trim().toLowerCase();
+    const demoAccount = DEMO_ACCOUNTS[normalizedIdentifier];
+    if (demoAccount) {
+      if (password !== demoAccount.password || role !== demoAccount.role) {
+        return res.status(401).json({ success: false, error: 'The demo username, password, and selected portal must match.' });
+      }
+      const user = await getDemoAccount(demoAccount.role);
+      if (!user) {
+        return res.status(503).json({ success: false, error: 'Demo data is not loaded yet. Ask the administrator to load the attendance roster.' });
+      }
+      const { password_hash: _passwordHash, ...safeUser } = user;
+      return res.json({ success: true, demo_mode: true, user: { ...safeUser, demo_mode: true } });
+    }
+
     const candidates = await allAsync<any>(
       `SELECT DISTINCT u.* FROM users u
        LEFT JOIN students s ON s.student_id = u.user_id

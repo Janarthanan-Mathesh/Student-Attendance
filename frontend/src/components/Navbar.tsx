@@ -43,7 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPersona, onSelectPersona,
                 Attendance Tracker
               </h1>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-semibold tracking-wider">
-                PROD v2.4
+                {currentUser?.demo_mode ? 'DEMO' : 'PROD v2.4'}
               </span>
             </div>
             <p className="text-xs text-slate-400 flex items-center gap-1.5">

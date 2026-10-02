@@ -148,6 +148,12 @@ export const App: React.FC = () => {
         onToggleTheme={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')}
       />}
 
+      {currentUser?.demo_mode && (
+        <div className="border-b border-cyan-500/20 bg-cyan-950/40 px-4 py-2 text-center text-xs font-medium text-cyan-200">
+          Demo session · sample {currentUser.role === 'FACULTY' ? 'mentor' : currentUser.role.toLowerCase()} portal data
+        </div>
+      )}
+
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
         {currentUser && <>

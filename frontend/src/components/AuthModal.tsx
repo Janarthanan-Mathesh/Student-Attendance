@@ -226,6 +226,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
   };
 
   const currentConfig = selectedPersona ? personaConfigs[selectedPersona] : null;
+  const demoCredential = selectedPersona === 'STUDENT'
+    ? { username: 'student@123', password: 'student@123' }
+    : selectedPersona === 'FACULTY'
+      ? { username: 'mentor@123', password: 'mentor@123' }
+      : selectedPersona === 'PARENT'
+        ? { username: 'parent@123', password: 'parent@123' }
+        : null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
@@ -460,6 +467,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                     Sign In to {selectedPersona} Portal
                   </button>
                 </form>
+                {demoCredential && (
+                  <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/20 p-3 text-xs text-slate-300">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-bold text-cyan-300">Demo access · no registration or authenticator needed</p>
+                        <p className="mt-1">Username: <span className="font-mono text-white">{demoCredential.username}</span></p>
+                        <p>Password: <span className="font-mono text-white">{demoCredential.password}</span></p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setLoginIdentifier(demoCredential.username); setLoginPassword(demoCredential.password); setLoginError(null); }}
+                        className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 font-semibold text-cyan-200 hover:bg-cyan-500/20"
+                      >
+                        Use demo login
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

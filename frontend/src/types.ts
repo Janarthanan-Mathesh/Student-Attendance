@@ -14,6 +14,7 @@ export interface UserProfile {
   parent_phone?: string;
   parent_email?: string;
   mentor_name?: string;
+  demo_mode?: boolean;
   created_at?: string;
 }
 
