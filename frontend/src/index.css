@@ -31,6 +31,31 @@
   }
 }
 
+/* Light palette overrides for the existing slate-based interface. */
+[data-theme="light"] body, [data-theme="light"] #root > div {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+[data-theme="light"] .bg-\[\#0b0f17\], [data-theme="light"] .bg-slate-950,
+[data-theme="light"] .bg-slate-950\/80, [data-theme="light"] .bg-slate-950\/60,
+[data-theme="light"] .bg-slate-950\/50, [data-theme="light"] .bg-slate-900,
+[data-theme="light"] .bg-slate-900\/90, [data-theme="light"] .bg-slate-900\/60,
+[data-theme="light"] .bg-slate-900\/50, [data-theme="light"] .bg-slate-900\/40,
+[data-theme="light"] .bg-slate-800, [data-theme="light"] .glass-card {
+  background-color: #ffffff !important;
+}
+[data-theme="light"] .text-white, [data-theme="light"] .text-slate-100,
+[data-theme="light"] .text-slate-200, [data-theme="light"] .text-slate-300 {
+  color: #0f172a !important;
+}
+[data-theme="light"] .text-slate-400, [data-theme="light"] .text-slate-500 {
+  color: #475569 !important;
+}
+[data-theme="light"] .border-slate-800, [data-theme="light"] .border-slate-700 {
+  border-color: #cbd5e1 !important;
+}
+[data-theme="light"] header { background-color: rgb(255 255 255 / 92%) !important; }
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

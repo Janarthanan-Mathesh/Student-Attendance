@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Users, ShieldCheck, Cpu, Smartphone, Activity, LogIn } from 'lucide-react';
+import { User, Users, ShieldCheck, Cpu, Smartphone, Activity, LogIn, Sun, Moon } from 'lucide-react';
 import { UserProfile } from '../types';
 import { Student } from '../types';
 
@@ -18,9 +18,11 @@ interface NavbarProps {
   mentorNames?: string[];
   selectedMentorName?: string;
   onSelectMentor?: (mentorName: string) => void;
+  theme?: 'dark' | 'light';
+  onToggleTheme?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentPersona, onSelectPersona, currentUser, onOpenProfile, onOpenAuth, students = [], onViewParent, onSelectStudent, selectedStudentId = '', mentorNames = [], selectedMentorName = '', onSelectMentor }) => {
+export const Navbar: React.FC<NavbarProps> = ({ currentPersona, onSelectPersona, currentUser, onOpenProfile, onOpenAuth, students = [], onViewParent, onSelectStudent, selectedStudentId = '', mentorNames = [], selectedMentorName = '', onSelectMentor, theme = 'dark', onToggleTheme }) => {
   return (
     <header className="sticky top-0 z-50 glass-card border-b border-slate-800 bg-[#0b0f17]/80 backdrop-blur-xl px-4 lg:px-8 py-3">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
@@ -114,6 +116,9 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPersona, onSelectPersona,
           </div>
 
           {/* User Profile / Auth Button */}
+          <button onClick={onToggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} className="p-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 hover:border-cyan-500/50">
+            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
           {currentUser ? (
             <button
               onClick={onOpenProfile}

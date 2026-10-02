@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { FileText, Download, ShieldCheck, Printer } from 'lucide-react';
-import { fetchStudentDetails } from '../lib/api';
+import { API_BASE, fetchStudentDetails } from '../lib/api';
 
 interface PDFNoticeModalProps {
   studentId: string;
@@ -13,7 +13,8 @@ export const PDFNoticeModal: React.FC<PDFNoticeModalProps> = ({ studentId, cours
   const [qrUrl, setQrUrl] = useState<string>('');
   const [attendanceRecord, setAttendanceRecord] = useState<any>(null);
   const [courseTitle, setCourseTitle] = useState<string>(courseCode);
-  const pdfApiUrl = `/api/pdf/deficiency-notice?student_id=${studentId}&course_code=${courseCode}`;
+  const [downloadError, setDownloadError] = useState('');
+  const pdfApiUrl = `${API_BASE}/pdf/deficiency-notice?student_id=${encodeURIComponent(studentId)}&course_code=${encodeURIComponent(courseCode)}`;
 
   const digitalHash = `SHA256-${studentId.slice(0, 6)}-${courseCode}-901A8F3C`;
 
@@ -31,6 +32,28 @@ export const PDFNoticeModal: React.FC<PDFNoticeModalProps> = ({ studentId, cours
     QRCode.toDataURL(verifyUrl).then(setQrUrl).catch(console.error);
     return () => { active = false; };
   }, [studentId, courseCode]);
+
+  const downloadPDF = async () => {
+    setDownloadError('');
+    try {
+      const response = await fetch(pdfApiUrl);
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error || 'PDF generation failed. Please try again.');
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `Deficiency_Notice_${studentId}_${courseCode}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'PDF download failed.');
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
@@ -110,16 +133,15 @@ export const PDFNoticeModal: React.FC<PDFNoticeModalProps> = ({ studentId, cours
           >
             Close Preview
           </button>
-          <a
-            href={pdfApiUrl}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            onClick={downloadPDF}
             className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs flex items-center space-x-2 shadow-lg shadow-cyan-600/30"
           >
             <Download className="w-4 h-4" />
             <span>Download PDF Notice</span>
-          </a>
+          </button>
         </div>
+        {downloadError && <p role="alert" className="text-sm text-rose-400">{downloadError}</p>}
 
       </div>
     </div>

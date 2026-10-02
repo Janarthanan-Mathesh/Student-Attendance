@@ -162,6 +162,11 @@ export async function initDatabase() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  try {
+    await runAsync('ALTER TABLE leave_od_requests ADD COLUMN document_data TEXT');
+  } catch (error: any) {
+    if (!String(error?.message || '').includes('duplicate column')) throw error;
+  }
 
   await runAsync(`
     CREATE TABLE IF NOT EXISTS counseling_logs (

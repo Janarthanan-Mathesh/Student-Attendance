@@ -16,9 +16,24 @@ export const App: React.FC = () => {
   const [currentStudent, setCurrentStudent] = useState<Student | null>(null);
   const [mentorParentStudent, setMentorParentStudent] = useState<Student | null>(null);
   const [selectedMentorName, setSelectedMentorName] = useState('');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => (localStorage.getItem('attendance_theme') as 'dark' | 'light') || 'dark');
   
   // Auth & Profile State - Defaults to null to require explicit Login/Register on startup
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('attendance_tracker_user');
+      if (!saved) return null;
+      const session = JSON.parse(saved);
+      if (!session.expires_at || Date.now() >= session.expires_at) {
+        localStorage.removeItem('attendance_tracker_user');
+        return null;
+      }
+      return session.user as UserProfile;
+    } catch {
+      localStorage.removeItem('attendance_tracker_user');
+      return null;
+    }
+  });
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
   const mentorNames = Array.from(new Set(students.map((student) => student.mentor_name).filter((name): name is string => Boolean(name)))).sort((a, b) => a.localeCompare(b));
@@ -28,9 +43,32 @@ export const App: React.FC = () => {
   const [pdfTarget, setPdfTarget] = useState<{ studentId: string; courseCode: string } | null>(null);
 
   useEffect(() => {
-    // Always begin at the login screen when the application opens.
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('attendance_theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
     loadStudents();
+    const saved = localStorage.getItem('attendance_tracker_user');
+    if (saved) {
+      try {
+        const session = JSON.parse(saved);
+        if (session.user) setCurrentPersona(session.user.role as Persona);
+      } catch { /* invalid session is cleared during initialization */ }
+    }
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    let expiresAt = 0;
+    try { expiresAt = JSON.parse(localStorage.getItem('attendance_tracker_user') || '{}').expires_at || 0; } catch { /* invalid session expires immediately */ }
+    const timeout = window.setTimeout(() => {
+      setCurrentUser(null);
+      localStorage.removeItem('attendance_tracker_user');
+      setShowAuthModal(true);
+    }, Math.max(0, expiresAt - Date.now()));
+    return () => window.clearTimeout(timeout);
+  }, [currentUser]);
 
   const loadStudents = async () => {
     try {
@@ -70,7 +108,7 @@ export const App: React.FC = () => {
 
   const handleAuthSuccess = async (user: UserProfile) => {
     setCurrentUser(user);
-    localStorage.setItem('attendance_tracker_user', JSON.stringify(user));
+    localStorage.setItem('attendance_tracker_user', JSON.stringify({ user, expires_at: Date.now() + 30 * 60 * 1000 }));
     setShowAuthModal(false);
 
     if (user.role) {
@@ -106,6 +144,8 @@ export const App: React.FC = () => {
         mentorNames={mentorNames}
         selectedMentorName={activeMentorName}
         onSelectMentor={(name) => { setSelectedMentorName(name); setMentorParentStudent(null); }}
+        theme={theme}
+        onToggleTheme={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')}
       />}
 
       {/* Main Content Area */}
@@ -164,7 +204,7 @@ export const App: React.FC = () => {
           user={currentUser}
           onUpdateUser={(updated) => {
             setCurrentUser(updated);
-            localStorage.setItem('attendance_tracker_user', JSON.stringify(updated));
+    localStorage.setItem('attendance_tracker_user', JSON.stringify({ user: updated, expires_at: Date.now() + 30 * 60 * 1000 }));
           }}
           onLogout={handleLogout}
           onClose={() => setShowProfileModal(false)}

@@ -11,7 +11,15 @@ const SubmitLeaveSchema = z.object({
   date_to: z.string(),
   hours_applied: z.number().min(1),
   reason: z.string(),
-  document_name: z.string().optional()
+  document_name: z.string().optional(),
+  document_data: z.string().max(11 * 1024 * 1024).optional()
+}).superRefine((data, context) => {
+  if (data.request_type === 'MEDICAL' && (!data.document_name || !data.document_data)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'A medical document is required.', path: ['document_data'] });
+  }
+  if (data.document_data && !/^data:(application\/pdf|image\/(jpeg|png));base64,/.test(data.document_data)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Document must be a PDF, JPG or PNG.', path: ['document_data'] });
+  }
 });
 
 export async function submitLeaveOD(req: Request, res: Response) {
@@ -21,12 +29,12 @@ export async function submitLeaveOD(req: Request, res: Response) {
       return res.status(400).json({ success: false, error: parse.error.issues });
     }
 
-    const { student_id, course_code, request_type, date_from, date_to, hours_applied, reason, document_name } = parse.data;
+    const { student_id, course_code, request_type, date_from, date_to, hours_applied, reason, document_name, document_data } = parse.data;
 
     const result = await runAsync(
-      `INSERT INTO leave_od_requests (student_id, course_code, request_type, date_from, date_to, hours_applied, reason, document_name, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
-      [student_id, course_code, request_type, date_from, date_to, hours_applied, reason, document_name || 'document.pdf']
+      `INSERT INTO leave_od_requests (student_id, course_code, request_type, date_from, date_to, hours_applied, reason, document_name, document_data, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+      [student_id, course_code, request_type, date_from, date_to, hours_applied, reason, document_name || null, document_data || null]
     );
 
     // Audit log

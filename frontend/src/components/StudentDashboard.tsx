@@ -13,16 +13,22 @@ const dailyAttendanceSchedule = [
   { time: 'Biometric Forenoon', status: 'Present' },
   { time: '08:45 AM – 09:35 AM', status: 'Present' },
   { time: '09:35 AM – 10:25 AM', status: 'Absent' },
-  { time: 'BREAK · 10:25 AM – 10:40 AM', status: null },
   { time: '10:40 AM – 11:30 AM', status: 'Present' },
   { time: '11:30 AM – 12:20 PM', status: 'Present' },
-  { time: 'LUNCH · 12:20 PM – 01:30 PM', status: null },
   { time: 'Biometric Afternoon', status: 'Present' },
   { time: '01:30 PM – 02:20 PM', status: 'Present' },
   { time: '02:20 PM – 03:10 PM', status: 'Present' },
-  { time: 'BREAK · 03:10 PM – 03:25 PM', status: null },
   { time: '03:25 PM – 04:25 PM', status: 'Present' }
 ];
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Could not read the selected document.'));
+    reader.onerror = () => reject(new Error('Could not read the selected document.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onOpenPDF }) => {
   const [selectedCourse, setSelectedCourse] = useState<DeficiencyRecord | null>(null);
@@ -39,7 +45,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
   const [odHours, setOdHours] = useState<number>(4);
   const [odDateFrom, setOdDateFrom] = useState<string>('2026-08-30');
   const [odDateTo, setOdDateTo] = useState<string>('2026-08-31');
-  const [odDocName, setOdDocName] = useState<string>('Medical_Certificate_Hospital.pdf');
+  const [odDocument, setOdDocument] = useState<File | null>(null);
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().slice(0, 10));
   const [odMessage, setOdMessage] = useState<string | null>(null);
 
   // Dispute Drawer State
@@ -80,6 +87,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
     e.preventDefault();
     if (!selectedCourse) return;
     setOdMessage(null);
+    if (odType === 'MEDICAL' && !odDocument) {
+      setOdMessage('Please attach a medical document before submitting.');
+      return;
+    }
+    if (odDocument && odDocument.size > 10 * 1024 * 1024) {
+      setOdMessage('The document must be 10 MB or smaller.');
+      return;
+    }
 
     const res = await submitLeaveODAPI({
       student_id: student.student_id,
@@ -89,7 +104,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
       date_to: odDateTo,
       hours_applied: odHours,
       reason: odReason || 'Submitted via Student Portal',
-      document_name: odDocName
+      document_name: odDocument?.name,
+      document_data: odDocument ? await readFileAsDataUrl(odDocument) : undefined
     });
 
     if (res.success) {
@@ -232,9 +248,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="font-bold text-white">Hourly Attendance</h3>
-            <p className="text-xs text-slate-400">Daily timetable · breaks and lunch are excluded from attendance.</p>
+            <p className="text-xs text-slate-400">Choose a date to review its class periods.</p>
           </div>
-          <span className="text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">Demo slot entries</span>
+          <label className="flex items-center gap-2 text-xs text-slate-300">Date <input type="date" value={attendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200" /></label>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {dailyAttendanceSchedule.map((slot) => (
@@ -484,15 +500,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
 
               <div>
                 <label className="block text-slate-300 font-medium mb-1">Attach Supporting Document</label>
-                <div className="p-4 border-2 border-dashed border-slate-700 rounded-xl bg-slate-950/50 flex flex-col items-center justify-center cursor-pointer hover:border-cyan-500 transition-all">
+              <label className="p-4 border-2 border-dashed border-slate-700 rounded-xl bg-slate-950/50 flex flex-col items-center justify-center cursor-pointer hover:border-cyan-500 transition-all">
                   <FileText className="w-8 h-8 text-cyan-400 mb-1" />
-                  <span className="text-slate-300 font-semibold">{odDocName}</span>
-                  <span className="text-[10px] text-slate-500">PDF, JPG, PNG up to 10MB (Simulated Attachment)</span>
-                </div>
+                  <span className="text-slate-300 font-semibold">{odDocument?.name || 'Choose a supporting document'}</span>
+                  <span className="text-[10px] text-slate-500">PDF, JPG or PNG up to 10 MB {odType === 'MEDICAL' ? '· Required' : '· Optional'}</span>
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" onChange={(event) => setOdDocument(event.target.files?.[0] || null)} className="sr-only" />
+                </label>
               </div>
 
               {odMessage && (
-                <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                <div className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${odMessage.startsWith('Request submitted') ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' : 'bg-rose-500/20 border-rose-500/30 text-rose-300'}`}>
                   <CheckCircle className="w-4 h-4 shrink-0" />
                   <span>{odMessage}</span>
                 </div>

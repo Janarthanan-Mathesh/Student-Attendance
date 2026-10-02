@@ -2,13 +2,14 @@ import { Student, DeficiencyRecord, CommunicationLog, LeaveODRequest, Counseling
 
 // Set VITE_API_BASE_URL in production to the deployed backend URL ending in /api.
 // In local development, the relative path is served through Vite's /api proxy.
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
 function getUserHeaders() {
   try {
     const saved = localStorage.getItem('attendance_tracker_user');
     if (!saved) return {};
-    const u = JSON.parse(saved || '{}');
+    const parsed = JSON.parse(saved || '{}');
+    const u = parsed.user || parsed;
     const id = u?.user_id || u?.register_no || '';
     const role = u?.role || '';
     const headers: Record<string, string> = {};
