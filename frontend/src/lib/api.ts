@@ -130,17 +130,17 @@ export async function sendWhatsAppReplyAPI(student_id: string, reply_text: strin
 export async function submitLeaveODAPI(data: any) {
   const res = await fetch(`${API_BASE}/leave-od`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getUserHeaders() },
     body: JSON.stringify(data)
   });
   return await res.json();
 }
 
-export async function approveLeaveODAPI(id: number, status: string, approved_by: string) {
+export async function approveLeaveODAPI(id: number, status: 'APPROVED' | 'REJECTED') {
   const res = await fetch(`${API_BASE}/leave-od/${id}/approve`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status, approved_by })
+    headers: { 'Content-Type': 'application/json', ...getUserHeaders() },
+    body: JSON.stringify({ status })
   });
   return await res.json();
 }

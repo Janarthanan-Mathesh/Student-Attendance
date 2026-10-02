@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Student, DeficiencyRecord } from '../types';
-import { simulateAttendanceAPI, submitLeaveODAPI } from '../lib/api';
-import { Calculator, AlertTriangle, CheckCircle, FileText, Upload, TrendingUp, Zap, Sparkles } from 'lucide-react';
+import { Student, DeficiencyRecord, LeaveODRequest } from '../types';
+import { fetchStudentDetails, simulateAttendanceAPI, submitLeaveODAPI } from '../lib/api';
+import { Calculator, AlertTriangle, CheckCircle, FileText, Upload, TrendingUp, Zap, Sparkles, Bell, Clock, RotateCw } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 interface StudentDashboardProps {
@@ -32,6 +32,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onOpenPDF }) => {
   const [selectedCourse, setSelectedCourse] = useState<DeficiencyRecord | null>(null);
+  const [odRequests, setOdRequests] = useState<LeaveODRequest[]>([]);
   
   // Simulator State
   const [simAttended, setSimAttended] = useState<number>(5);
@@ -60,6 +61,15 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
       setSelectedCourse(student.courses[0]);
     }
   }, [student]);
+
+  const loadODRequests = async () => {
+    const details = await fetchStudentDetails(student.student_id);
+    if (details.success) setOdRequests(details.leave_od_requests || []);
+  };
+
+  useEffect(() => {
+    loadODRequests();
+  }, [student.student_id]);
 
   useEffect(() => {
     if (selectedCourse) {
@@ -112,6 +122,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
     });
 
     if (res.success) {
+      await loadODRequests();
       setOdMessage('Request submitted! Automatic reconciliation pending mentor sign-off.');
       setTimeout(() => {
         setShowODDrawer(false);
@@ -188,6 +199,34 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, onO
           </div>
         </div>
       </div>
+
+      {/* OD / Medical status notifications */}
+      <section className="glass-card rounded-2xl p-5 border border-cyan-500/20 space-y-3" aria-live="polite">
+        <div className="flex items-center gap-2">
+          <Bell className="w-4 h-4 text-cyan-300" />
+          <h3 className="font-bold text-white">OD / Medical Request Updates</h3>
+          {odRequests.some((request) => request.status === 'PENDING') && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">Pending review</span>}
+          <button type="button" onClick={loadODRequests} className="ml-auto inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2.5 py-1.5 text-[11px] font-medium text-slate-300 hover:border-cyan-500/40 hover:text-cyan-200"><RotateCw className="h-3 w-3" /> Refresh</button>
+        </div>
+        {odRequests.length === 0 ? <p className="text-xs text-slate-400">Your submitted requests and mentor decisions will appear here.</p> : (
+          <div className="space-y-2">
+            {odRequests.map((request) => {
+              const statusStyle = request.status === 'APPROVED' ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-300' : request.status === 'REJECTED' ? 'border-rose-500/30 bg-rose-950/20 text-rose-300' : 'border-amber-500/30 bg-amber-950/20 text-amber-300';
+              return <article key={request.id} className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-slate-100">{request.request_type.replace('_', ' ')} · {request.course_code}</p>
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusStyle}`}>{request.status}</span>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">{request.date_from} to {request.date_to} · {request.hours_applied} hours · Submitted {request.created_at}</p>
+                <p className="mt-1 text-xs text-slate-300">Reason: {request.reason}</p>
+                {request.approved_by && <p className="mt-1 text-xs text-slate-400">Reviewed by {request.approved_by}</p>}
+                {request.document_data && request.document_name && <a href={request.document_data} download={request.document_name} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-cyan-300 hover:text-cyan-200"><FileText className="h-3.5 w-3.5" /> View submitted document</a>}
+                {request.status === 'PENDING' && <p className="mt-2 flex items-center gap-1 text-[11px] text-amber-300"><Clock className="h-3 w-3" /> Waiting for your assigned mentor to review.</p>}
+              </article>;
+            })}
+          </div>
+        )}
+      </section>
 
       {/* Course Selection Tabs */}
       <div className="flex items-center space-x-2 overflow-x-auto pb-2">

@@ -78,6 +78,7 @@ export interface LeaveODRequest {
   hours_applied: number;
   reason: string;
   document_name?: string;
+  document_data?: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   approved_by?: string;
   created_at: string;

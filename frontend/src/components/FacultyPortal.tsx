@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DeficiencyRecord, Student, LeaveODRequest } from '../types';
 import { fetchDeficiencyRecords, dispatchBatchAlertsAPI, submitCounselingAPI, approveLeaveODAPI, fetchStudents, fetchStudentDetails } from '../lib/api';
-import { Send, Filter, MessageSquare, AlertTriangle, CheckCircle, FileText, UserCheck, ShieldAlert } from 'lucide-react';
+import { Send, Filter, MessageSquare, AlertTriangle, CheckCircle, FileText, UserCheck, ShieldAlert, Bell, Clock, X } from 'lucide-react';
 
 interface FacultyPortalProps {
   onOpenPDF: (studentId: string, courseCode: string) => void;
@@ -30,6 +30,8 @@ export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorN
   const [counselingNotes, setCounselingNotes] = useState<string>('');
   const [counselingAction, setCounselingAction] = useState<string>('');
   const [counselingSuccess, setCounselingSuccess] = useState<boolean>(false);
+  const [reviewingRequestId, setReviewingRequestId] = useState<number | null>(null);
+  const [reviewMessage, setReviewMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadRecords();
@@ -46,6 +48,24 @@ export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorN
       return { ...student, leave_od_requests: details.success ? details.leave_od_requests || [] : [] };
     }));
     setStudents(withDetails);
+  };
+
+  const handleODReview = async (requestId: number, status: 'APPROVED' | 'REJECTED') => {
+    setReviewingRequestId(requestId);
+    setReviewMessage(null);
+    try {
+      const result = await approveLeaveODAPI(requestId, status);
+      if (!result.success) {
+        setReviewMessage(result.error || 'Could not update this request. Refresh and try again.');
+        return;
+      }
+      setReviewMessage(result.message || `Request ${status.toLowerCase()}.`);
+      await Promise.all([loadStudents(), loadRecords()]);
+    } catch {
+      setReviewMessage('Could not connect to the server. The request status was not changed.');
+    } finally {
+      setReviewingRequestId(null);
+    }
   };
 
   const loadRecords = async () => {
@@ -175,6 +195,51 @@ export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorN
         ].map((band) => <div key={band.label} className={`rounded-2xl border p-4 ${band.color}`}>
           <p className="text-xs">Students {band.label}</p><p className="text-2xl font-extrabold mt-1">{band.count}</p>
         </div>)}
+      </section>
+
+      {/* Mentor OD / medical notifications and review inbox */}
+      <section className="glass-card rounded-2xl p-6 border border-amber-500/20 space-y-4" aria-live="polite">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-amber-300" />
+            <div>
+              <h3 className="font-bold text-white">OD / Medical Request Inbox</h3>
+              <p className="text-xs text-slate-400">Requests from students assigned to your mentor account.</p>
+            </div>
+          </div>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200">
+            {students.reduce((count, student) => count + (student.leave_od_requests || []).filter((request) => request.status === 'PENDING').length, 0)} pending
+          </span>
+        </div>
+        {reviewMessage && <p role="status" className="rounded-lg border border-cyan-500/20 bg-cyan-950/30 p-2 text-xs text-cyan-200">{reviewMessage}</p>}
+        {students.every((student) => !(student.leave_od_requests || []).length) ? (
+          <p className="text-xs text-slate-400">No OD or medical requests have been submitted by your assigned students.</p>
+        ) : (
+          <div className="space-y-3">
+            {students.flatMap((student) => (student.leave_od_requests || []).map((request) => ({ student, request })))
+              .sort((left, right) => Number(left.request.status !== 'PENDING') - Number(right.request.status !== 'PENDING') || right.request.id - left.request.id)
+              .map(({ student, request }) => {
+                const statusColor = request.status === 'APPROVED' ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-300' : request.status === 'REJECTED' ? 'border-rose-500/30 bg-rose-950/20 text-rose-300' : 'border-amber-500/30 bg-amber-950/20 text-amber-300';
+                return <article key={request.id} className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-white">{student.name} <span className="font-normal text-slate-400">· {student.register_no}</span></p>
+                      <p className="mt-1 text-xs text-slate-300">{request.request_type.replace('_', ' ')} · {request.course_code} · {request.date_from} to {request.date_to} · {request.hours_applied} hours</p>
+                    </div>
+                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${statusColor}`}>{request.status}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-300">Reason: {request.reason}</p>
+                  <p className="mt-1 text-[11px] text-slate-500">Submitted {request.created_at}{request.approved_by ? ` · Reviewed by ${request.approved_by}` : ''}</p>
+                  {request.document_data && request.document_name && <a href={request.document_data} download={request.document_name} onClick={(event) => event.stopPropagation()} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-cyan-300 hover:text-cyan-200"><FileText className="h-3.5 w-3.5" /> View supporting document</a>}
+                  {request.status === 'PENDING' ? <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="mr-auto flex items-center gap-1 text-[11px] text-amber-300"><Clock className="h-3 w-3" /> Awaiting mentor review</span>
+                    <button type="button" disabled={reviewingRequestId === request.id} onClick={() => handleODReview(request.id, 'REJECTED')} className="inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-900/40 disabled:opacity-50"><X className="h-3.5 w-3.5" /> Reject</button>
+                    <button type="button" disabled={reviewingRequestId === request.id} onClick={() => handleODReview(request.id, 'APPROVED')} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"><CheckCircle className="h-3.5 w-3.5" /> Approve</button>
+                  </div> : <p className="mt-2 text-[11px] text-slate-400">Decision: {request.status.toLowerCase()} by {request.approved_by || 'mentor'}.</p>}
+                </article>;
+              })}
+          </div>
+        )}
       </section>
 
       <section className="glass-card rounded-2xl p-6 border border-indigo-500/20 space-y-4">
