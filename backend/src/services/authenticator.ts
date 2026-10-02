@@ -116,6 +116,11 @@ export async function beginAuthenticatorRegistration(registration: any) {
   return prepareChallenge({ userId: null, purpose: 'REGISTER', secret, registration, email: registration.email });
 }
 
+export async function beginAuthenticatorEnrollment(userId: string, email: string) {
+  const secret = encodeBase32(randomBytes(20));
+  return prepareChallenge({ userId, purpose: 'LOGIN_SETUP', secret, email });
+}
+
 export async function beginAuthenticatorLogin(userId: string) {
   const configured = await getAsync<{ secret_encrypted: string }>(
     `SELECT secret_encrypted FROM user_authenticators WHERE user_id = ? LIMIT 1`, [userId]
@@ -129,13 +134,13 @@ export async function beginAuthenticatorLogin(userId: string) {
     );
     return { challenge_id: challengeId, requires_authenticator_setup: false, expires_in_seconds: CHALLENGE_MS / 1000 };
   }
-  throw new Error('No authenticator is registered for this account. Contact your administrator for account recovery; login cannot enroll a new authenticator.');
+  throw new Error('No authenticator is registered for this account. Open the Registration tab and enter the same role, ID, institutional email, and current password to enroll your existing account.');
 }
 
 export async function verifyAuthenticatorChallenge(
   challengeId: string,
   code: string,
-  expectedPurpose?: AuthenticatorChallenge['purpose']
+  expectedPurpose?: AuthenticatorChallenge['purpose'] | AuthenticatorChallenge['purpose'][]
 ) {
   const challenge = await getAsync<AuthenticatorChallenge>(
     `SELECT * FROM authenticator_challenges WHERE challenge_id = ? LIMIT 1`, [challengeId]
@@ -144,7 +149,7 @@ export async function verifyAuthenticatorChallenge(
     if (challenge) await runAsync(`DELETE FROM authenticator_challenges WHERE challenge_id = ?`, [challengeId]);
     throw new Error('Authenticator challenge expired. Start again.');
   }
-  if (expectedPurpose && challenge.purpose !== expectedPurpose) {
+  if (expectedPurpose && !(Array.isArray(expectedPurpose) ? expectedPurpose : [expectedPurpose]).includes(challenge.purpose)) {
     throw new Error('Authenticator challenge is not valid for this flow. Start again.');
   }
   if (challenge.attempts >= 5) {
@@ -206,8 +211,10 @@ export async function verifyAuthenticatorChallenge(
   if (!userId) throw new Error('Account setup failed. Please start again.');
   const user = await getAsync<any>(`SELECT * FROM users WHERE user_id = ? LIMIT 1`, [userId]);
   if (!user) throw new Error('Account not found.');
-  if (challenge.purpose !== 'REGISTER') {
+  if (challenge.purpose === 'LOGIN') {
     await runAsync(`INSERT INTO audit_logs (action_type, performed_by, target_id, details) VALUES ('USER_LOGIN', ?, ?, ?)`, [user.name, user.user_id, `User logged in under role ${user.role} after authenticator verification`]);
+  } else if (challenge.purpose === 'LOGIN_SETUP') {
+    await runAsync(`INSERT INTO audit_logs (action_type, performed_by, target_id, details) VALUES ('AUTHENTICATOR_ENROLLED', ?, ?, ?)`, [user.name, user.user_id, `Authenticator enrolled for existing ${user.role} account`]);
   }
   const { password_hash: _passwordHash, ...safeUser } = user;
   return safeUser;

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { getAsync, runAsync, allAsync } from '../db/database';
 import { z } from 'zod';
-import { beginAuthenticatorLogin, beginAuthenticatorRegistration, verifyAuthenticatorChallenge } from '../services/authenticator';
+import { beginAuthenticatorEnrollment, beginAuthenticatorLogin, beginAuthenticatorRegistration, verifyAuthenticatorChallenge } from '../services/authenticator';
 import { departmentCodeFromName, departmentCodeFromRoll, hasInstitutionEmail, STUDENT_DEPARTMENTS, validateStudentDepartmentIdentity } from '../services/departmentRules';
 
 const RegisterSchema = z.object({
@@ -16,7 +16,7 @@ const RegisterSchema = z.object({
   parent_phone: z.string().optional(),
   parent_email: z.string().optional(),
   mentor_name: z.string().optional().default('Mentor not assigned'),
-  password: z.string().min(4).optional().default('password123')
+  password: z.string().min(4)
 });
 
 const LoginSchema = z.object({
@@ -63,16 +63,30 @@ export async function registerUser(req: Request, res: Response) {
       lookupRegisterNo = `PAR_${linkedRoll}`;
     }
 
-    // Check if user already exists
-    const existing = await getAsync(
-      `SELECT user_id FROM users WHERE upper(register_no) = ? OR lower(email) = ? LIMIT 1`,
+    // CSV imports provision accounts in advance. Let the real account owner
+    // enroll MFA using the exact existing account credentials, without making
+    // a duplicate account or overwriting the roster data.
+    const existing = await getAsync<{ user_id: string; register_no: string; email: string; role: string; password_hash: string }>(
+      `SELECT user_id, register_no, email, role, password_hash FROM users WHERE upper(register_no) = ? OR lower(email) = ? LIMIT 1`,
       [lookupRegisterNo, normalizedEmail]
     );
 
     if (existing) {
-      return res.status(400).json({
-        success: false,
-        error: 'A user with this Register No or Email already exists. Please login instead.'
+      const matchesAccount = existing.role === role && existing.register_no.toUpperCase() === lookupRegisterNo && existing.email.toLowerCase() === normalizedEmail;
+      if (!matchesAccount || existing.password_hash !== parse.data.password) {
+        return res.status(400).json({ success: false, error: 'The existing account details do not match. Use the same role, ID, institutional email, and password used for this account.' });
+      }
+      const enrolled = await getAsync<{ user_id: string }>('SELECT user_id FROM user_authenticators WHERE user_id = ? LIMIT 1', [existing.user_id]);
+      if (enrolled) {
+        return res.status(409).json({ success: false, error: 'This account is already enrolled. Sign in and enter the current six-digit authenticator code.' });
+      }
+      const challenge = await beginAuthenticatorEnrollment(existing.user_id, normalizedEmail);
+      return res.json({
+        success: true,
+        requires_authenticator_setup: true,
+        existing_account: true,
+        message: 'Verify your existing account, scan this QR code once, and enter the current six-digit code. You have five code attempts.',
+        ...challenge
       });
     }
 
@@ -99,8 +113,8 @@ export async function verifyAuthenticatorRegistration(req: Request, res: Respons
   try {
     const parsed = z.object({ challenge_id: z.string().uuid(), otp_code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ success: false, error: 'Enter the six-digit code from your authenticator app.' });
-    const user = await verifyAuthenticatorChallenge(parsed.data.challenge_id, parsed.data.otp_code, 'REGISTER');
-    return res.json({ success: true, message: 'Authenticator verified. Registration complete.', user });
+    const user = await verifyAuthenticatorChallenge(parsed.data.challenge_id, parsed.data.otp_code, ['REGISTER', 'LOGIN_SETUP']);
+    return res.json({ success: true, message: 'Authenticator verified. Your account is ready to sign in.', user });
   } catch (err: any) {
     const status = err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') || err.message.includes('not valid for this flow') ? 400 : 500;
     return res.status(status).json({ success: false, error: err.message });

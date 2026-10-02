@@ -57,7 +57,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
   const [regMentorName, setRegMentorName] = useState<string>('');
   const [regLangPref, setRegLangPref] = useState<string>('EN');
   const [regAdminKey, setRegAdminKey] = useState<string>('');
-  const [regPassword, setRegPassword] = useState<string>('password123');
+  const [regPassword, setRegPassword] = useState<string>('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [enrollingExistingAccount, setEnrollingExistingAccount] = useState(false);
   const [regError, setRegError] = useState<string | null>(null);
   const [regSuccessMsg, setRegSuccessMsg] = useState<string | null>(null);
 
@@ -135,6 +137,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
     try {
       const res = await registerUserAPI(payload);
       if (res.success && res.requires_authenticator_setup && res.challenge_id && res.qr_data_url) {
+        setEnrollingExistingAccount(Boolean(res.existing_account));
         setRegisterChallengeId(res.challenge_id);
         setRegisterAuthenticatorQr(res.qr_data_url);
         setRegisterAuthenticatorKey(res.setup_key || '');
@@ -154,7 +157,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
     try {
       const res = await verifyRegistrationOTPAPI(registerChallengeId, registerOtpCode);
       if (res.success && res.user) {
-        setRegSuccessMsg(`Authenticator verified. Registration successful!`);
+        setRegSuccessMsg(enrollingExistingAccount ? 'Authenticator verified. Your existing account is ready to sign in.' : 'Authenticator verified. Registration successful!');
         setTimeout(() => {
           onSuccess(res.user);
           if (onClose) onClose();
@@ -476,10 +479,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                     />
                   </div>
                   {regError && <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs">{regError}</div>}
-                  <button type="submit" className={`w-full py-3 rounded-xl text-white font-bold text-xs shadow-lg ${currentConfig?.btnColor}`}>Verify and Create Account</button>
+                  <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">You have up to five attempts to enter the current six-digit code. Keep this QR in your authenticator app for future logins.</p>
+                  <button type="submit" className={`w-full py-3 rounded-xl text-white font-bold text-xs shadow-lg ${currentConfig?.btnColor}`}>Verify and {enrollingExistingAccount ? 'Enroll Account' : 'Create Account'}</button>
                   <button type="button" onClick={() => { setRegisterOtpStep(false); setRegisterChallengeId(''); setRegError(null); }} className="w-full py-2 text-slate-400 hover:text-white text-xs">Back to registration</button>
                 </form>
               ) : <form onSubmit={handleRegisterSubmit} className="space-y-4">
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-slate-300">
+                  <p className="font-semibold text-amber-300">Already listed in the attendance CSV?</p>
+                  <p className="mt-1">Choose your role and enter the same ID, institutional email, and password already assigned to your account. This enrolls your existing account instead of creating a duplicate. Authenticator verification allows up to five code attempts.</p>
+                </div>
                 
                 {/* PERSONA 1: STUDENT TAILORED REGISTRATION */}
                 {selectedPersona === 'STUDENT' && (
@@ -805,6 +813,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                     </div>
                   </div>
                 )}
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Account Password *</label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <input
+                      type={showRegPassword ? 'text' : 'password'}
+                      required
+                      minLength={4}
+                      autoComplete="current-password"
+                      value={regPassword}
+                      onChange={(event) => setRegPassword(event.target.value)}
+                      placeholder="Enter your account password"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-11 py-2.5 text-slate-200 focus:outline-none focus:border-cyan-500"
+                    />
+                    <button type="button" onClick={() => setShowRegPassword((visible) => !visible)} aria-label={showRegPassword ? 'Hide password' : 'Show password'} aria-pressed={showRegPassword} className="absolute right-3 top-2.5 text-slate-400 hover:text-cyan-300">
+                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    CSV account defaults: {selectedPersona === 'STUDENT' ? 'student roll number' : selectedPersona === 'FACULTY' ? 'mentor ID' : 'linked student roll number'}. If changed later, use the current password.
+                  </p>
+                </div>
 
                 {regError && (
                   <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
