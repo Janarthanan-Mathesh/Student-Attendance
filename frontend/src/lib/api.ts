@@ -66,6 +66,24 @@ export async function verifyLoginOTPAPI(challenge_id: string, otp_code: string) 
   return await res.json();
 }
 
+export async function beginAdminAuthenticatorSetupAPI(identifier: string, password: string) {
+  const res = await fetch(`${API_BASE}/auth/admin/setup-authenticator`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier, password })
+  });
+  return await res.json();
+}
+
+export async function verifyAdminAuthenticatorSetupAPI(challenge_id: string, otp_code: string) {
+  const res = await fetch(`${API_BASE}/auth/admin/verify-authenticator`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ challenge_id, otp_code })
+  });
+  return await res.json();
+}
+
 export async function uploadBulkExcelAPI(rows: any[]) {
   const res = await fetch(`${API_BASE}/upload/bulk-excel`, {
     method: 'POST',

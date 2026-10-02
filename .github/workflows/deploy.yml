@@ -26,6 +26,18 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
+      - name: Check backend API configuration
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+        run: |
+          if [ -z "$VITE_API_BASE_URL" ]; then
+            echo "VITE_API_BASE_URL is missing. Set it in GitHub repository Settings > Secrets and variables > Actions > Variables to your deployed backend URL ending in /api."
+            exit 1
+          fi
+          case "$VITE_API_BASE_URL" in
+            https://*/api) ;;
+            *) echo "VITE_API_BASE_URL must be an HTTPS backend URL ending in /api."; exit 1 ;;
+          esac
       - run: npm run build
         working-directory: frontend
         env:

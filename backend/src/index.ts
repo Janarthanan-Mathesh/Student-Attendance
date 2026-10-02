@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 5050;
 console.log('[DEBUG] Express app initialized, PORT:', PORT);
 
 app.use(cors());
-app.use(express.json({ limit: '12mb' }));
+app.use(express.json({ limit: '15mb' }));
 
 // Health Check
 app.get('/health', (req, res) => {

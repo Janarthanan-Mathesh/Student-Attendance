@@ -29,6 +29,9 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPersona, onSelectPersona,
         
         {/* Brand Logo & Status */}
         <div className="flex items-center space-x-3">
+          <button onClick={onToggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} className="p-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 hover:border-cyan-500/50">
+            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-500 to-purple-600 p-0.5 shadow-lg shadow-cyan-500/20">
             <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
               <Cpu className="w-5 h-5 text-cyan-400 animate-pulse" />
@@ -116,9 +119,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPersona, onSelectPersona,
           </div>
 
           {/* User Profile / Auth Button */}
-          <button onClick={onToggleTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} className="p-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 hover:border-cyan-500/50">
-            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
           {currentUser ? (
             <button
               onClick={onOpenProfile}

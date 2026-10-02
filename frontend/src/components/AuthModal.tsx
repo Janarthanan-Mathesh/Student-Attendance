@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { loginUserAPI, registerUserAPI, verifyLoginOTPAPI, verifyRegistrationOTPAPI } from '../lib/api';
+import { beginAdminAuthenticatorSetupAPI, loginUserAPI, registerUserAPI, verifyAdminAuthenticatorSetupAPI, verifyLoginOTPAPI, verifyRegistrationOTPAPI } from '../lib/api';
 import { User, Users, Smartphone, ShieldCheck, LogIn, UserPlus, Mail, Phone, Lock, Building, BookOpen, CheckCircle, AlertCircle, ArrowLeft, Globe, Eye, EyeOff } from 'lucide-react';
 
 interface AuthModalProps {
@@ -66,6 +66,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
   // Authenticator app verification state
   const [loginOtpStep, setLoginOtpStep] = useState<boolean>(false);
   const [loginChallengeId, setLoginChallengeId] = useState<string>('');
+  const [adminAuthenticatorSetupStep, setAdminAuthenticatorSetupStep] = useState(false);
+  const [adminSetupChallengeId, setAdminSetupChallengeId] = useState('');
+  const [adminSetupQr, setAdminSetupQr] = useState('');
+  const [adminSetupKey, setAdminSetupKey] = useState('');
+  const [adminSetupOtp, setAdminSetupOtp] = useState('');
   const [otpCodeInput, setOtpCodeInput] = useState<string>('');
   const [registerOtpStep, setRegisterOtpStep] = useState<boolean>(false);
   const [registerChallengeId, setRegisterChallengeId] = useState<string>('');
@@ -106,6 +111,44 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
         if (onClose) onClose();
       } else {
         setLoginError(res.error || 'Invalid verification code.');
+      }
+    } catch {
+      setLoginError('Could not verify the code. Check your connection and try again.');
+    }
+  };
+
+  const handleBeginAdminAuthenticatorSetup = async () => {
+    if (!loginIdentifier.trim() || !loginPassword) {
+      setLoginError('Enter your admin ID/email and password before setting up an authenticator.');
+      return;
+    }
+    setLoginError(null);
+    try {
+      const res = await beginAdminAuthenticatorSetupAPI(loginIdentifier, loginPassword);
+      if (res.success && res.challenge_id && res.qr_data_url) {
+        setAdminSetupChallengeId(res.challenge_id);
+        setAdminSetupQr(res.qr_data_url);
+        setAdminSetupKey(res.setup_key || '');
+        setAdminSetupOtp('');
+        setAdminAuthenticatorSetupStep(true);
+      } else {
+        setLoginError(res.error || 'Could not start administrator authenticator setup.');
+      }
+    } catch {
+      setLoginError('Could not connect to the attendance server. Please try again later.');
+    }
+  };
+
+  const handleVerifyAdminAuthenticatorSetup = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoginError(null);
+    try {
+      const res = await verifyAdminAuthenticatorSetupAPI(adminSetupChallengeId, adminSetupOtp);
+      if (res.success && res.user) {
+        onSuccess(res.user);
+        if (onClose) onClose();
+      } else {
+        setLoginError(res.error || 'Authenticator setup failed. Enter the current six-digit code.');
       }
     } catch {
       setLoginError('Could not verify the code. Check your connection and try again.');
@@ -371,7 +414,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
 
             {/* LOGIN FORM */}
             {activeTab === 'LOGIN' && (
-              loginOtpStep ? (
+              adminAuthenticatorSetupStep ? (
+                <form onSubmit={handleVerifyAdminAuthenticatorSetup} className="space-y-4">
+                  <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-4 space-y-3 text-center">
+                    <h4 className="font-bold text-white">Set up the admin authenticator</h4>
+                    <p className="text-xs text-slate-300">Scan this QR code once with Google Authenticator or Microsoft Authenticator. Enter the current six-digit code to finish setup.</p>
+                    <img src={adminSetupQr} alt="Admin authenticator setup QR code" className="mx-auto w-48 rounded-lg bg-white p-2" />
+                    <details className="text-left text-xs text-slate-400">
+                      <summary className="cursor-pointer">Can’t scan? Show setup key</summary>
+                      <code className="mt-2 block break-all rounded bg-slate-900 p-2 text-cyan-300">{adminSetupKey}</code>
+                    </details>
+                    <p className="text-xs text-amber-200">You have five code attempts. Authenticator codes refresh every 30 seconds.</p>
+                  </div>
+                  <label className="block text-slate-300 font-medium mb-1" htmlFor="admin-setup-otp">Six-digit authenticator code</label>
+                  <input id="admin-setup-otp" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required value={adminSetupOtp} onChange={(event) => setAdminSetupOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Enter current 6-digit code" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-200 tracking-widest focus:outline-none focus:border-purple-500" />
+                  {loginError && <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs">{loginError}</div>}
+                  <button type="submit" className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs">Verify and Enable Admin Authenticator</button>
+                  <button type="button" onClick={() => { setAdminAuthenticatorSetupStep(false); setAdminSetupChallengeId(''); setAdminSetupQr(''); setAdminSetupKey(''); setLoginError(null); }} className="w-full py-2 text-slate-400 hover:text-white text-xs">Back to admin login</button>
+                </form>
+              ) : loginOtpStep ? (
                 <form onSubmit={handleVerifyOTP} className="space-y-4">
                   <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-2">
                     <h4 className="font-bold text-white">Authenticator verification</h4>
@@ -448,6 +509,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                   >
                     Sign In to {selectedPersona} Portal
                   </button>
+                  {selectedPersona === 'ADMIN' && <button type="button" onClick={handleBeginAdminAuthenticatorSetup} className="w-full py-2 text-purple-300 hover:text-purple-200 text-xs font-semibold">First time here? Set up admin authenticator</button>}
                 </form>
               </div>
             )}

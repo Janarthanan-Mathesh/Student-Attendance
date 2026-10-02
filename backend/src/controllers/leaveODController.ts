@@ -12,7 +12,7 @@ const SubmitLeaveSchema = z.object({
   hours_applied: z.number().min(1),
   reason: z.string(),
   document_name: z.string().optional(),
-  document_data: z.string().max(11 * 1024 * 1024).optional()
+  document_data: z.string().max(14 * 1024 * 1024).optional()
 }).superRefine((data, context) => {
   if (data.request_type === 'MEDICAL' && (!data.document_name || !data.document_data)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'A medical document is required.', path: ['document_data'] });

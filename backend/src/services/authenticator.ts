@@ -134,13 +134,14 @@ export async function beginAuthenticatorLogin(userId: string) {
     );
     return { challenge_id: challengeId, requires_authenticator_setup: false, expires_in_seconds: CHALLENGE_MS / 1000 };
   }
-  throw new Error('No authenticator is registered for this account. Open the Registration tab and enter the same role, ID, institutional email, and current password to enroll your existing account.');
+  throw new Error('No authenticator is registered for this account. Use its authenticator setup flow, then sign in with the current six-digit code.');
 }
 
 export async function verifyAuthenticatorChallenge(
   challengeId: string,
   code: string,
-  expectedPurpose?: AuthenticatorChallenge['purpose'] | AuthenticatorChallenge['purpose'][]
+  expectedPurpose?: AuthenticatorChallenge['purpose'] | AuthenticatorChallenge['purpose'][],
+  expectedRole?: string
 ) {
   const challenge = await getAsync<AuthenticatorChallenge>(
     `SELECT * FROM authenticator_challenges WHERE challenge_id = ? LIMIT 1`, [challengeId]
@@ -151,6 +152,10 @@ export async function verifyAuthenticatorChallenge(
   }
   if (expectedPurpose && !(Array.isArray(expectedPurpose) ? expectedPurpose : [expectedPurpose]).includes(challenge.purpose)) {
     throw new Error('Authenticator challenge is not valid for this flow. Start again.');
+  }
+  if (expectedRole) {
+    const owner = challenge.user_id ? await getAsync<{ role: string }>('SELECT role FROM users WHERE user_id = ? LIMIT 1', [challenge.user_id]) : undefined;
+    if (owner?.role !== expectedRole) throw new Error('Authenticator challenge is not valid for this account.');
   }
   if (challenge.attempts >= 5) {
     await runAsync(`DELETE FROM authenticator_challenges WHERE challenge_id = ?`, [challengeId]);
