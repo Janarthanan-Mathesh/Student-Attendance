@@ -7,7 +7,7 @@ import { submitLeaveOD, approveLeaveOD } from '../controllers/leaveODController'
 import { createCounselingLog, getCounselingLogs } from '../controllers/counselingController';
 import { getAuditLogs } from '../controllers/auditController';
 import { generatePDFNotice } from '../controllers/pdfController';
-import { registerUser, verifyAuthenticatorRegistration, loginUser, verifyLoginAuthenticator, updateProfile, beginAdminAuthenticatorSetup, verifyAdminAuthenticatorSetup } from '../controllers/authController';
+import { registerUser, verifyAuthenticatorRegistration, loginUser, verifyLoginAuthenticator, updateProfile } from '../controllers/authController';
 import { bulkUploadExcel } from '../controllers/uploadController';
 
 const router = Router();
@@ -18,8 +18,6 @@ router.post('/auth/register/verify-authenticator', verifyAuthenticatorRegistrati
 router.post('/auth/login', loginUser);
 router.put('/auth/profile', updateProfile);
 router.post('/auth/login/verify-authenticator', verifyLoginAuthenticator);
-router.post('/auth/admin/setup-authenticator', beginAdminAuthenticatorSetup);
-router.post('/auth/admin/verify-authenticator', verifyAdminAuthenticatorSetup);
 
 // Bulk Excel / CSV Upload Route
 router.post('/upload/bulk-excel', bulkUploadExcel);

@@ -150,6 +150,15 @@ export async function loginUser(req: Request, res: Response) {
       return res.status(403).json({ success: false, error: 'This account must use an institutional @bitsathy.ac.in email. Contact the administrator to correct the roster email.' });
     }
 
+    if (user.role === 'ADMIN') {
+      await runAsync(
+        `INSERT INTO audit_logs (action_type, performed_by, target_id, details) VALUES ('USER_LOGIN', ?, ?, ?)`,
+        [user.name, user.user_id, 'Admin signed in with admin ID/email and password.']
+      );
+      const { password_hash: _passwordHash, ...safeUser } = user;
+      return res.json({ success: true, user: safeUser });
+    }
+
     const authenticator = await beginAuthenticatorLogin(user.user_id);
 
     return res.json({
@@ -174,41 +183,6 @@ export async function verifyLoginAuthenticator(req: Request, res: Response) {
     return res.json({ success: true, message: `Welcome back, ${user.name}!`, user });
   } catch (err: any) {
     const status = err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') || err.message.includes('not valid for this flow') ? 400 : 500;
-    return res.status(status).json({ success: false, error: err.message });
-  }
-}
-
-export async function beginAdminAuthenticatorSetup(req: Request, res: Response) {
-  try {
-    const parsed = z.object({ identifier: z.string().min(1), password: z.string().min(1) }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ success: false, error: 'Enter your admin ID or email and password.' });
-    const identifier = parsed.data.identifier.trim();
-    const candidates = await allAsync<any>(
-      `SELECT * FROM users WHERE role = 'ADMIN' AND (upper(register_no) = ? OR lower(email) = ? OR user_id = ?)`,
-      [identifier.toUpperCase(), identifier.toLowerCase(), identifier]
-    );
-    const admin = candidates.find((candidate) => candidate.password_hash === parsed.data.password);
-    if (!admin) return res.status(401).json({ success: false, error: 'Admin ID/email or password is incorrect.' });
-
-    const enrolled = await getAsync<{ user_id: string }>('SELECT user_id FROM user_authenticators WHERE user_id = ? LIMIT 1', [admin.user_id]);
-    if (enrolled) return res.status(409).json({ success: false, error: 'An authenticator is already enrolled. Sign in with its current six-digit code.' });
-
-    const challenge = await beginAuthenticatorEnrollment(admin.user_id, admin.email);
-    return res.json({ success: true, requires_authenticator_setup: true, ...challenge });
-  } catch (err: any) {
-    const status = err.message.includes('Authenticator setup is not configured') ? 503 : 500;
-    return res.status(status).json({ success: false, error: err.message });
-  }
-}
-
-export async function verifyAdminAuthenticatorSetup(req: Request, res: Response) {
-  try {
-    const parsed = z.object({ challenge_id: z.string().uuid(), otp_code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ success: false, error: 'Enter the current six-digit code from your authenticator app.' });
-    const user = await verifyAuthenticatorChallenge(parsed.data.challenge_id, parsed.data.otp_code, 'LOGIN_SETUP', 'ADMIN');
-    return res.json({ success: true, message: 'Admin authenticator enrolled successfully.', user });
-  } catch (err: any) {
-    const status = err.message.includes('expired') || err.message.includes('Incorrect') || err.message.includes('Too many') || err.message.includes('not valid for this flow') || err.message.includes('not valid for this account') ? 400 : 500;
     return res.status(status).json({ success: false, error: err.message });
   }
 }

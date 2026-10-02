@@ -140,8 +140,7 @@ export async function beginAuthenticatorLogin(userId: string) {
 export async function verifyAuthenticatorChallenge(
   challengeId: string,
   code: string,
-  expectedPurpose?: AuthenticatorChallenge['purpose'] | AuthenticatorChallenge['purpose'][],
-  expectedRole?: string
+  expectedPurpose?: AuthenticatorChallenge['purpose'] | AuthenticatorChallenge['purpose'][]
 ) {
   const challenge = await getAsync<AuthenticatorChallenge>(
     `SELECT * FROM authenticator_challenges WHERE challenge_id = ? LIMIT 1`, [challengeId]
@@ -152,10 +151,6 @@ export async function verifyAuthenticatorChallenge(
   }
   if (expectedPurpose && !(Array.isArray(expectedPurpose) ? expectedPurpose : [expectedPurpose]).includes(challenge.purpose)) {
     throw new Error('Authenticator challenge is not valid for this flow. Start again.');
-  }
-  if (expectedRole) {
-    const owner = challenge.user_id ? await getAsync<{ role: string }>('SELECT role FROM users WHERE user_id = ? LIMIT 1', [challenge.user_id]) : undefined;
-    if (owner?.role !== expectedRole) throw new Error('Authenticator challenge is not valid for this account.');
   }
   if (challenge.attempts >= 5) {
     await runAsync(`DELETE FROM authenticator_challenges WHERE challenge_id = ?`, [challengeId]);
