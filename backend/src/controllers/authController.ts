@@ -212,11 +212,12 @@ export async function loginUser(req: Request, res: Response) {
       return res.json({ success: true, user: safeUser });
     }
 
-    const authenticator = await beginAuthenticatorLogin(user.user_id);
+    const authenticator = await beginAuthenticatorLogin(user.user_id, user.email);
 
     return res.json({
       success: true,
       requires_otp: !authenticator.requires_authenticator_setup,
+      requires_authenticator_setup: authenticator.requires_authenticator_setup,
       message: authenticator.requires_authenticator_setup
         ? 'Set up an authenticator app, then enter its six-digit code.'
         : 'Enter the current six-digit code from your authenticator app.',

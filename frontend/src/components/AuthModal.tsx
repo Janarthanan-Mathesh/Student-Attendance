@@ -67,6 +67,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
 
   // Authenticator app verification state
   const [loginOtpStep, setLoginOtpStep] = useState<boolean>(false);
+  const [loginAuthenticatorSetup, setLoginAuthenticatorSetup] = useState<boolean>(false);
   const [loginChallengeId, setLoginChallengeId] = useState<string>('');
   const [otpCodeInput, setOtpCodeInput] = useState<string>('');
   const [registerOtpStep, setRegisterOtpStep] = useState<boolean>(false);
@@ -83,7 +84,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
 
     try {
       const res = await loginUserAPI(loginIdentifier, loginPassword, selectedPersona || undefined);
-      if (res.success && res.requires_otp && res.challenge_id) {
+      if (res.success && res.requires_authenticator_setup && res.challenge_id && res.qr_data_url) {
+        setLoginChallengeId(res.challenge_id);
+        setRegisterAuthenticatorQr(res.qr_data_url);
+        setRegisterAuthenticatorKey(res.setup_key || '');
+        setRegisterOtpCode('');
+        setLoginAuthenticatorSetup(true);
+      } else if (res.success && res.requires_otp && res.challenge_id) {
         setLoginChallengeId(res.challenge_id);
         setLoginOtpStep(true);
         setOtpCodeInput('');
@@ -95,6 +102,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
       }
     } catch {
       setLoginError('Could not connect to the attendance server. Please try again later.');
+    }
+  };
+
+  const handleVerifyLoginSetup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    try {
+      const res = await verifyRegistrationOTPAPI(loginChallengeId, registerOtpCode);
+      if (res.success && res.user) {
+        onSuccess(res.user);
+        if (onClose) onClose();
+      } else {
+        setLoginError(typeof res.error === 'string' ? res.error : 'The code is invalid or expired. Please try again.');
+      }
+    } catch {
+      setLoginError('Could not verify the code. Check your connection and try again.');
     }
   };
 
@@ -389,7 +412,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
 
             {/* LOGIN FORM */}
             {activeTab === 'LOGIN' && (
-              loginOtpStep ? (
+              loginAuthenticatorSetup ? (
+                <form onSubmit={handleVerifyLoginSetup} className="space-y-4">
+                  <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-2">
+                    <h4 className="font-bold text-white">Finish setting up your authenticator</h4>
+                    <p className="text-xs text-slate-300">Your registered credentials are valid, but this account has no authenticator linked yet. Scan this QR code, then enter the current six-digit code.</p>
+                    <img src={registerAuthenticatorQr} alt="Authenticator setup QR code" className="mx-auto w-48 rounded-lg bg-white p-2" />
+                    <p className="text-xs text-slate-300">Or enter this setup key in your authenticator app:</p>
+                    <code className="block break-all rounded bg-slate-900 p-2 text-center text-xs text-cyan-300">{registerAuthenticatorKey}</code>
+                  </div>
+                  <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required value={registerOtpCode} onChange={(event) => setRegisterOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Enter current 6-digit code" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-200 tracking-widest focus:outline-none focus:border-cyan-500" />
+                  {loginError && <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs">{loginError}</div>}
+                  <button type="submit" className="w-full py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shadow-lg">Verify and Sign In</button>
+                  <button type="button" onClick={() => { setLoginAuthenticatorSetup(false); setLoginChallengeId(''); setLoginError(null); }} className="w-full py-2 text-slate-400 hover:text-white text-xs">Back to login</button>
+                </form>
+              ) : loginOtpStep ? (
                 <form onSubmit={handleVerifyOTP} className="space-y-4">
                   <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4 space-y-2">
                     <h4 className="font-bold text-white">Authenticator verification</h4>
@@ -414,6 +451,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                   <button type="button" onClick={() => { setLoginOtpStep(false); setLoginChallengeId(''); setLoginError(null); }} className="w-full py-2 text-slate-400 hover:text-white text-xs">Back to login</button>
                 </form>
               ) : <div className="space-y-4">
+                <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-3 text-xs text-slate-300">
+                  <p className="font-semibold text-cyan-300">Registered account</p>
+                  <p className="mt-1">Use the email or ID and password you entered during registration first. After your credentials are accepted, enter your authenticator code or finish setting up an authenticator for this account.</p>
+                </div>
                 
                 {/* Form Input */}
                 <form onSubmit={handleLoginSubmit} className="space-y-4">
@@ -467,11 +508,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                     Sign In to {selectedPersona} Portal
                   </button>
                 </form>
+                {selectedPersona !== 'ADMIN' && <p className="text-[11px] text-slate-500">CSV roster accounts: if you have not registered separately, use the roster email, with your student roll number (or mentor ID for faculty) as the initial password.</p>}
                 {demoCredential && (
-                  <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/20 p-3 text-xs text-slate-300">
+                  <details className="rounded-xl border border-slate-700 bg-slate-900/50 p-3 text-xs text-slate-400">
+                    <summary className="cursor-pointer">Demo access (optional)</summary>
+                    <div className="mt-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <p className="font-bold text-cyan-300">Demo access · no registration or authenticator needed</p>
+                        <p className="font-semibold text-slate-300">Demo credentials · no authenticator needed</p>
                         <p className="mt-1">Username: <span className="font-mono text-white">{demoCredential.username}</span></p>
                         <p>Password: <span className="font-mono text-white">{demoCredential.password}</span></p>
                       </div>
@@ -483,7 +527,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
                         Use demo login
                       </button>
                     </div>
-                  </div>
+                    </div>
+                  </details>
                 )}
               </div>
             )}

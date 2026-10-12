@@ -121,7 +121,7 @@ export async function beginAuthenticatorEnrollment(userId: string, email: string
   return prepareChallenge({ userId, purpose: 'LOGIN_SETUP', secret, email });
 }
 
-export async function beginAuthenticatorLogin(userId: string) {
+export async function beginAuthenticatorLogin(userId: string, email: string) {
   const configured = await getAsync<{ secret_encrypted: string }>(
     `SELECT secret_encrypted FROM user_authenticators WHERE user_id = ? LIMIT 1`, [userId]
   );
@@ -134,7 +134,13 @@ export async function beginAuthenticatorLogin(userId: string) {
     );
     return { challenge_id: challengeId, requires_authenticator_setup: false, expires_in_seconds: CHALLENGE_MS / 1000 };
   }
-  throw new Error('No authenticator is registered for this account. Use its authenticator setup flow, then sign in with the current six-digit code.');
+  // A user may have completed registration before authenticator enrollment was
+  // persisted (for example, if setup was interrupted). Let a valid password
+  // owner enroll again instead of leaving the account unable to sign in.
+  return {
+    ...await beginAuthenticatorEnrollment(userId, email),
+    requires_authenticator_setup: true
+  };
 }
 
 export async function verifyAuthenticatorChallenge(
