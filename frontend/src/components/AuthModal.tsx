@@ -567,7 +567,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onSuccess, onClose }) => {
               ) : <form onSubmit={handleRegisterSubmit} className="space-y-4">
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-slate-300">
                   <p className="font-semibold text-amber-300">Already listed in the attendance CSV?</p>
-                  <p className="mt-1">Choose your role and enter the same ID, institutional email, and password already assigned to your account. This enrolls your existing account instead of creating a duplicate. Authenticator verification allows up to five code attempts.</p>
+                  <p className="mt-1">Use the role, register number, and current password for your existing account. You can enter your current name, institutional email, contact, parent, and mentor details here; after authenticator verification, those details will appear in your profile. They do not need to match the CSV.</p>
                 </div>
                 
                 {/* PERSONA 1: STUDENT TAILORED REGISTRATION */}

@@ -116,9 +116,9 @@ export async function beginAuthenticatorRegistration(registration: any) {
   return prepareChallenge({ userId: null, purpose: 'REGISTER', secret, registration, email: registration.email });
 }
 
-export async function beginAuthenticatorEnrollment(userId: string, email: string) {
+export async function beginAuthenticatorEnrollment(userId: string, email: string, profile?: Record<string, unknown>) {
   const secret = encodeBase32(randomBytes(20));
-  return prepareChallenge({ userId, purpose: 'LOGIN_SETUP', secret, email });
+  return prepareChallenge({ userId, purpose: 'LOGIN_SETUP', secret, email, registration: profile });
 }
 
 export async function beginAuthenticatorLogin(userId: string, email: string) {
@@ -211,6 +211,24 @@ export async function verifyAuthenticatorChallenge(
     await runAsync(`INSERT INTO user_authenticators (user_id, secret_encrypted) VALUES (?, ?)`, [userId, challenge.secret_encrypted]);
   } else if (challenge.purpose === 'LOGIN_SETUP') {
     await runAsync(`INSERT INTO user_authenticators (user_id, secret_encrypted) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET secret_encrypted = excluded.secret_encrypted`, [userId, challenge.secret_encrypted]);
+    const profile = JSON.parse(challenge.registration_json || 'null');
+    if (profile && userId) {
+      await runAsync(
+        `UPDATE users SET name = ?, email = ?, phone = ?, department = ?, section = ?, parent_name = ?, parent_phone = ?, parent_email = ?, mentor_name = ? WHERE user_id = ?`,
+        [profile.name, profile.email, profile.phone, profile.department, profile.section, profile.parent_name, profile.parent_phone, profile.parent_email, profile.mentor_name, userId]
+      );
+      if (profile.role === 'STUDENT') {
+        await runAsync(
+          `UPDATE students SET name = ?, email = ?, phone = ?, department = ?, section = ?, parent_name = ?, parent_phone = ?, parent_email = ?, mentor_name = ? WHERE student_id = ? OR register_no = ?`,
+          [profile.name, profile.email, profile.phone, profile.department, profile.section, profile.parent_name, profile.parent_phone, profile.parent_email, profile.mentor_name, userId, profile.register_no]
+        );
+      } else if (profile.role === 'PARENT' && profile.linked_student_roll) {
+        await runAsync(
+          `UPDATE students SET parent_name = ?, parent_phone = ?, parent_email = ? WHERE upper(register_no) = ?`,
+          [profile.name, profile.phone, profile.email, profile.linked_student_roll]
+        );
+      }
+    }
   }
 
   await runAsync(`DELETE FROM authenticator_challenges WHERE challenge_id = ?`, [challengeId]);

@@ -100,24 +100,41 @@ export async function registerUser(req: Request, res: Response) {
       lookupRegisterNo = `PAR_${linkedRoll}`;
     }
 
-    // CSV imports provision accounts in advance. Let the real account owner
-    // enroll MFA using the exact existing account credentials, without making
-    // a duplicate account or overwriting the roster data.
+    // The stable account identity is the role-specific register number. A
+    // registration may correct roster contact/profile details; those changes
+    // are saved only after the user proves account ownership with password + OTP.
     const existing = await getAsync<{ user_id: string; register_no: string; email: string; role: string; password_hash: string }>(
-      `SELECT user_id, register_no, email, role, password_hash FROM users WHERE upper(register_no) = ? OR lower(email) = ? LIMIT 1`,
-      [lookupRegisterNo, normalizedEmail]
+      `SELECT user_id, register_no, email, role, password_hash FROM users WHERE upper(register_no) = ? LIMIT 1`,
+      [lookupRegisterNo]
     );
 
     if (existing) {
-      const matchesAccount = existing.role === role && existing.register_no.toUpperCase() === lookupRegisterNo && existing.email.toLowerCase() === normalizedEmail;
-      if (!matchesAccount || existing.password_hash !== parse.data.password) {
-        return res.status(400).json({ success: false, error: 'The existing account details do not match. Use the same role, ID, institutional email, and password used for this account.' });
+      if (existing.role !== role || existing.password_hash !== parse.data.password) {
+        return res.status(400).json({ success: false, error: 'The role, register number, or current account password is incorrect.' });
       }
+      const emailOwner = await getAsync<{ user_id: string }>(
+        'SELECT user_id FROM users WHERE lower(email) = ? AND user_id <> ? LIMIT 1',
+        [normalizedEmail, existing.user_id]
+      );
+      if (emailOwner) return res.status(409).json({ success: false, error: 'This email is already used by another account. Enter an email address you own.' });
       const enrolled = await getAsync<{ user_id: string }>('SELECT user_id FROM user_authenticators WHERE user_id = ? LIMIT 1', [existing.user_id]);
       if (enrolled) {
         return res.status(409).json({ success: false, error: 'This account is already enrolled. Sign in and enter the current six-digit authenticator code.' });
       }
-      const challenge = await beginAuthenticatorEnrollment(existing.user_id, normalizedEmail);
+      const challenge = await beginAuthenticatorEnrollment(existing.user_id, normalizedEmail, {
+        name: parse.data.name,
+        email: normalizedEmail,
+        phone: parse.data.phone,
+        department,
+        section: parse.data.section,
+        parent_name: parse.data.parent_name || '',
+        parent_phone: parse.data.parent_phone || '',
+        parent_email: parse.data.parent_email || '',
+        role,
+        register_no: lookupRegisterNo,
+        mentor_name: mentorName,
+        linked_student_roll: role === 'PARENT' ? register_no.trim().toUpperCase() : undefined
+      });
       return res.json({
         success: true,
         requires_authenticator_setup: true,
@@ -126,6 +143,12 @@ export async function registerUser(req: Request, res: Response) {
         ...challenge
       });
     }
+
+    const emailOwner = await getAsync<{ user_id: string }>(
+      'SELECT user_id FROM users WHERE lower(email) = ? LIMIT 1',
+      [normalizedEmail]
+    );
+    if (emailOwner) return res.status(409).json({ success: false, error: 'An account already uses this email. Enter the register number associated with that account.' });
 
     const challenge = await beginAuthenticatorRegistration({
       ...parse.data,
