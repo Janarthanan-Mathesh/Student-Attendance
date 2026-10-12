@@ -80,8 +80,8 @@ export async function registerUser(req: Request, res: Response) {
         [mentorId]
       );
       if (!mentor) return res.status(400).json({ success: false, error: 'The selected faculty mentor is not available in the faculty roster. Contact the administrator.' });
-      // Store the faculty account's canonical name because mentor dashboards
-      // use this value to find their assigned students.
+      // Keep the canonical name for student-to-mentor matching in dashboards;
+      // preserve the selected registration label separately for the profile.
       mentorName = mentor.name;
     }
 
@@ -133,6 +133,7 @@ export async function registerUser(req: Request, res: Response) {
         role,
         register_no: lookupRegisterNo,
         mentor_name: mentorName,
+        profile_mentor_name: parse.data.mentor_name,
         linked_student_roll: role === 'PARENT' ? register_no.trim().toUpperCase() : undefined
       });
       return res.json({
@@ -155,6 +156,7 @@ export async function registerUser(req: Request, res: Response) {
       email: normalizedEmail,
       register_no: lookupRegisterNo,
       mentor_name: mentorName,
+      profile_mentor_name: parse.data.mentor_name,
       linked_student_roll: role === 'PARENT' ? register_no.trim().toUpperCase() : undefined,
       department
     });
@@ -240,7 +242,6 @@ export async function loginUser(req: Request, res: Response) {
     return res.json({
       success: true,
       requires_otp: !authenticator.requires_authenticator_setup,
-      requires_authenticator_setup: authenticator.requires_authenticator_setup,
       message: authenticator.requires_authenticator_setup
         ? 'Set up an authenticator app, then enter its six-digit code.'
         : 'Enter the current six-digit code from your authenticator app.',
@@ -312,10 +313,9 @@ export async function updateProfile(req: Request, res: Response) {
            parent_phone = COALESCE(?, parent_phone),
            parent_email = COALESCE(?, parent_email),
            department = COALESCE(?, department),
-           section = COALESCE(?, section),
-           mentor_name = COALESCE(?, mentor_name)
+           section = COALESCE(?, section)
        WHERE student_id = ? OR register_no = ?`,
-      [phone, email, parent_name, parent_phone, parent_email, effectiveDepartment, section, mentor_name, user_id, user_id]
+      [phone, email, parent_name, parent_phone, parent_email, effectiveDepartment, section, user_id, user_id]
     );
 
     const updatedUser = await getAsync(`SELECT * FROM users WHERE user_id = ? OR register_no = ?`, [user_id, user_id]);

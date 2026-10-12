@@ -18,9 +18,20 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ user, onUpdateUser, 
   const [parentPhone, setParentPhone] = useState<string>(user.parent_phone || '');
   const [parentEmail, setParentEmail] = useState<string>(user.parent_email || '');
   const [department, setDepartment] = useState<string>(user.department);
-  const [section, setSection] = useState<string>(user.section || 'A');
   const [mentorName, setMentorName] = useState<string>(user.mentor_name || 'Mentor not assigned');
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const studentYear = user.role === 'STUDENT' ? yearFromRegisterNo(user.register_no) : null;
+
+  function yearFromRegisterNo(registerNo: string) {
+    const match = /^7376(\d{2})/.exec(registerNo.trim());
+    if (!match) return 'Not available';
+    const admissionYear = 2000 + Number(match[1]);
+    const today = new Date();
+    const academicYearStart = today.getMonth() >= 6 ? today.getFullYear() : today.getFullYear() - 1;
+    const year = Math.max(1, academicYearStart - admissionYear + 1);
+    const labels = ['First Year', 'Second Year', 'Third Year', 'Fourth Year'];
+    return labels[year - 1] || `${year}${year % 10 === 1 && year % 100 !== 11 ? 'st' : year % 10 === 2 && year % 100 !== 12 ? 'nd' : year % 10 === 3 && year % 100 !== 13 ? 'rd' : 'th'} Year`;
+  }
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +45,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ user, onUpdateUser, 
       parent_phone: parentPhone,
       parent_email: parentEmail,
       department,
-      section,
       mentor_name: mentorName
     });
 
@@ -81,10 +91,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ user, onUpdateUser, 
                 <span className="text-slate-400 block">Department</span>
                 <strong className="text-white text-sm">{user.department}</strong>
               </div>
-              <div>
-                <span className="text-slate-400 block">Section</span>
-                <strong className="text-cyan-300 text-sm">Section {user.section || 'A'}</strong>
-              </div>
+              {studentYear && <div>
+                <span className="text-slate-400 block">Year</span>
+                <strong className="text-cyan-300 text-sm">{studentYear}</strong>
+              </div>}
               <div>
                 <span className="text-slate-400 block">Email Address</span>
                 <strong className="text-slate-200">{user.email}</strong>
@@ -167,15 +177,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ user, onUpdateUser, 
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Section</label>
-                <input
-                  type="text"
-                  value={section}
-                  onChange={(e) => setSection(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-slate-200 focus:outline-none focus:border-cyan-500"
-                />
-              </div>
+              {studentYear && <div>
+                <label className="block text-slate-300 font-medium mb-1">Year</label>
+                <div className="w-full rounded-xl border border-slate-700 bg-slate-900 p-2.5 text-cyan-300">{studentYear}</div>
+              </div>}
             </div>
 
             <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">

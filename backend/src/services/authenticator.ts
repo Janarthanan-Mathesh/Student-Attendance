@@ -173,7 +173,7 @@ export async function verifyAuthenticatorChallenge(
     const registration = JSON.parse(challenge.registration_json || '{}');
     const {
       name, register_no, email, phone, role, department, section,
-      parent_name, parent_phone, parent_email, mentor_name, password
+      parent_name, parent_phone, parent_email, mentor_name, profile_mentor_name, password
     } = registration;
     const normalizedRegisterNo = String(register_no).trim().toUpperCase();
     userId = role === 'FACULTY'
@@ -184,13 +184,15 @@ export async function verifyAuthenticatorChallenge(
     await runAsync(
       `INSERT INTO users (user_id, name, register_no, email, phone, role, department, section, parent_name, parent_phone, parent_email, mentor_name, password_hash)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, name, storedRegisterNo, String(email).toLowerCase(), phone, role, department, section || 'A', parent_name || 'N/A', parent_phone || 'N/A', parent_email || 'N/A', mentor_name || 'Mentor not assigned', password || 'password123']
+      [userId, name, storedRegisterNo, String(email).toLowerCase(), phone, role, department, section || 'A', parent_name || 'N/A', parent_phone || 'N/A', parent_email || 'N/A', profile_mentor_name || mentor_name || 'Mentor not assigned', password || 'password123']
     );
     if (role === 'STUDENT') {
       await runAsync(
         `INSERT INTO students (student_id, name, register_no, email, phone, parent_id, parent_name, parent_phone, parent_email, department, section, mentor_name)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(student_id) DO UPDATE SET name = excluded.name, email = excluded.email, phone = excluded.phone`,
+         ON CONFLICT(student_id) DO UPDATE SET name = excluded.name, email = excluded.email, phone = excluded.phone,
+           parent_name = excluded.parent_name, parent_phone = excluded.parent_phone, parent_email = excluded.parent_email,
+           department = excluded.department, section = excluded.section, mentor_name = excluded.mentor_name`,
         [userId, name, userId, String(email).toLowerCase(), phone, parentId, parent_name || 'Parent/Guardian', parent_phone || phone, parent_email || email, department, section || 'A', mentor_name || 'Mentor not assigned']
       );
       await runAsync(
@@ -215,7 +217,7 @@ export async function verifyAuthenticatorChallenge(
     if (profile && userId) {
       await runAsync(
         `UPDATE users SET name = ?, email = ?, phone = ?, department = ?, section = ?, parent_name = ?, parent_phone = ?, parent_email = ?, mentor_name = ? WHERE user_id = ?`,
-        [profile.name, profile.email, profile.phone, profile.department, profile.section, profile.parent_name, profile.parent_phone, profile.parent_email, profile.mentor_name, userId]
+        [profile.name, profile.email, profile.phone, profile.department, profile.section, profile.parent_name, profile.parent_phone, profile.parent_email, profile.profile_mentor_name || profile.mentor_name, userId]
       );
       if (profile.role === 'STUDENT') {
         await runAsync(
