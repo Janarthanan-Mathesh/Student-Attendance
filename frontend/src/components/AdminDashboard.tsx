@@ -12,6 +12,11 @@ export const AdminDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
   const [uploadResult, setUploadResult] = useState<string | null>(null);
+  const [uploadMode, setUploadMode] = useState<'bulk' | 'single'>('bulk');
+  const [singleStudent, setSingleStudent] = useState({
+    registerNo: '', name: '', studentEmail: '', studentPhone: '', parentName: '', parentPhone: '', parentEmail: '',
+    mentorName: '', mentorEmail: '', mentorId: '', department: '', section: 'A', workingDays: '', presentDays: ''
+  });
 
   useEffect(() => {
     loadAdminData();
@@ -92,7 +97,7 @@ export const AdminDashboard: React.FC = () => {
     if (row.some((value) => value !== '')) parsedRows.push(row);
     if (parsedRows.length < 2) return [];
 
-    const headers = parsedRows[0].map((header) => header.trim());
+    const headers = parsedRows[0].map((header) => header.trim().toUpperCase());
     return parsedRows.slice(1).map((columns) => Object.fromEntries(headers.map((header, index) => [header, columns[index] || ''])));
   };
 
@@ -105,15 +110,48 @@ export const AdminDashboard: React.FC = () => {
       const rows = parseCSV(text);
       try {
         const res = await uploadBulkExcelAPI(rows);
-        if (res.success) setUploadResult(`Imported ${res.processed_count || 0} students, their parents, and ${res.mentor_count || 0} mentors`);
-        else setUploadResult(`Failed: ${res.error || 'unknown'}`);
+        if (res.success) setUploadResult(`IMPORTED ${res.processed_count || 0} STUDENTS, THEIR PARENTS, AND ${res.mentor_count || 0} MENTORS`);
+        else setUploadResult(`FAILED: ${res.error || 'UNKNOWN'}`.toUpperCase());
         if (res.success) await loadAdminData();
       } catch (err: any) {
-        setUploadResult(`Error: ${err.message || String(err)}`);
+        setUploadResult(`ERROR: ${err.message || String(err)}`.toUpperCase());
       }
     };
     reader.readAsText(file);
   };
+
+  const handleSingleStudentSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setUploadResult(null);
+    try {
+      const row = {
+        'ROLL NO.': singleStudent.registerNo.trim().toUpperCase(),
+        'STUDENT NAME': singleStudent.name.trim(),
+        'STUDENT MAIL ID': singleStudent.studentEmail.trim().toLowerCase(),
+        'STUDENT MOBILE NO.': singleStudent.studentPhone.trim(),
+        'PARENT NAME (FATHER)': singleStudent.parentName.trim(),
+        'PARENT MOBILE NO.': singleStudent.parentPhone.trim(),
+        'PARENT MAIL ID': singleStudent.parentEmail.trim().toLowerCase(),
+        'MENTOR NAME': singleStudent.mentorName.trim(),
+        'MENTOR EMAIL': singleStudent.mentorEmail.trim().toLowerCase(),
+        'MENTOR ID': singleStudent.mentorId.trim().toUpperCase(),
+        DEPARTMENT: singleStudent.department,
+        SECTION: singleStudent.section.trim().toUpperCase(),
+        'TOTAL WORKING DAYS': singleStudent.workingDays || '0',
+        'TOTAL PRESENT DAYS': singleStudent.presentDays || '0'
+      };
+      const res = await uploadBulkExcelAPI([row]);
+      if (res.success) {
+        setUploadResult(`REGISTERED ${res.processed_count || 0} STUDENT, PARENT, AND ${res.mentor_count || 0} MENTOR`);
+        setSingleStudent({ registerNo: '', name: '', studentEmail: '', studentPhone: '', parentName: '', parentPhone: '', parentEmail: '', mentorName: '', mentorEmail: '', mentorId: '', department: '', section: 'A', workingDays: '', presentDays: '' });
+        await loadAdminData();
+      } else setUploadResult(`FAILED: ${res.error || 'UNKNOWN ERROR'}`);
+    } catch (err: any) {
+      setUploadResult(`ERROR: ${err.message || String(err)}`);
+    }
+  };
+
+  const formFieldClass = 'w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-purple-500 focus:outline-none';
 
   return (
     <div className="space-y-6">
@@ -146,7 +184,7 @@ export const AdminDashboard: React.FC = () => {
               onClick={() => setShowUploadModal(true)}
               className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-lg shadow-emerald-600/30"
             >
-              Bulk Upload CSV
+              BULK UPLOAD CSV
             </button>
           </div>
         </div>
@@ -184,31 +222,59 @@ export const AdminDashboard: React.FC = () => {
       {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="glass-card max-w-lg w-full rounded-2xl p-6 border border-slate-700 shadow-2xl relative space-y-4">
+          <div className="glass-card max-w-3xl w-full max-h-[90vh] overflow-y-auto rounded-2xl p-6 border border-slate-700 shadow-2xl relative space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">Bulk Upload Students / Parents / Faculty (CSV)</h3>
+              <h3 className="text-lg font-bold uppercase text-white">Student Registration</h3>
               <button onClick={() => setShowUploadModal(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <p className="text-xs text-slate-400">Upload the attendance CSV with <span className="font-mono">ROLL NO., STUDENT NAME, STUDENT MAIL ID, PARENT NAME (FATHER), PARENT MAIL ID, MENTOR NAME, MENTOR EMAIL, MENTOR ID</span> and attendance totals. Student and parent passwords use the student roll number; mentor passwords use the mentor ID.</p>
-
-            <div>
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={(e) => handleFileChange(e.target.files ? e.target.files[0] : null)}
-                className="w-full text-xs text-slate-200"
-              />
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-900 p-1">
+              <button type="button" onClick={() => { setUploadMode('bulk'); setUploadResult(null); }} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase ${uploadMode === 'bulk' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}>Bulk CSV Upload</button>
+              <button type="button" onClick={() => { setUploadMode('single'); setUploadResult(null); }} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase ${uploadMode === 'single' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}>Single Student Form</button>
             </div>
 
+            {uploadMode === 'bulk' ? (
+              <div className="space-y-3">
+                <p className="text-xs uppercase leading-relaxed text-slate-400">UPLOAD THE ATTENDANCE CSV WITH <span className="font-mono text-slate-300">ROLL NO., STUDENT NAME, STUDENT MAIL ID, PARENT NAME (FATHER), PARENT MAIL ID, MENTOR NAME, MENTOR EMAIL, MENTOR ID</span> AND ATTENDANCE TOTALS. HEADERS ARE ACCEPTED REGARDLESS OF CASE.</p>
+                <input type="file" accept=".csv,text/csv" onChange={(e) => handleFileChange(e.target.files ? e.target.files[0] : null)} className="w-full text-xs text-slate-200" />
+              </div>
+            ) : (
+              <form onSubmit={handleSingleStudentSubmit} className="space-y-4">
+                <p className="text-xs uppercase text-slate-400">ENTER STUDENT, PARENT, AND MENTOR DETAILS. INITIAL STUDENT/PARENT PASSWORD IS THE ROLL NUMBER; MENTOR PASSWORD IS THE MENTOR ID.</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {[
+                    ['registerNo', 'ROLL NUMBER', true], ['name', 'STUDENT NAME', true], ['studentEmail', 'STUDENT EMAIL', true], ['studentPhone', 'STUDENT PHONE', false],
+                    ['parentName', 'PARENT / GUARDIAN NAME', true], ['parentPhone', 'PARENT PHONE', false], ['parentEmail', 'PARENT EMAIL', true],
+                    ['mentorName', 'MENTOR NAME', true], ['mentorEmail', 'MENTOR EMAIL', true], ['mentorId', 'MENTOR ID', true],
+                    ['department', 'DEPARTMENT (MATCH ROLL NUMBER)', true], ['section', 'SECTION', true], ['workingDays', 'TOTAL WORKING DAYS', false], ['presentDays', 'TOTAL PRESENT DAYS', false]
+                  ].map(([key, label, required]) => (
+                    <label key={String(key)} className="space-y-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      {String(label)}
+                      <input
+                        required={Boolean(required)}
+                        type={String(key).toLowerCase().includes('email') ? 'email' : ['workingDays', 'presentDays'].includes(String(key)) ? 'number' : 'text'}
+                        min={['workingDays', 'presentDays'].includes(String(key)) ? '0' : undefined}
+                        inputMode={['workingDays', 'presentDays'].includes(String(key)) ? 'numeric' : undefined}
+                        placeholder={key === 'department' ? 'E.G. CS OR COMPUTER SCIENCE & ENGINEERING' : undefined}
+                        value={singleStudent[key as keyof typeof singleStudent]}
+                        onChange={(e) => setSingleStudent((current) => ({ ...current, [key]: e.target.value }))}
+                        className={formFieldClass}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold uppercase text-white hover:bg-emerald-500">Register Student</button>
+              </form>
+            )}
+
             {uploadResult && (
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs">
+              <div className={`p-3 rounded-xl border text-xs uppercase ${uploadResult.startsWith('FAILED') || uploadResult.startsWith('ERROR') ? 'bg-rose-500/10 border-rose-500/20 text-rose-300' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'}`}>
                 {uploadResult}
               </div>
             )}
 
             <div className="flex justify-end">
-              <button onClick={() => setShowUploadModal(false)} className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300">Close</button>
+              <button onClick={() => setShowUploadModal(false)} className="px-4 py-2 rounded-lg bg-slate-800 text-xs font-semibold uppercase text-slate-300">Close</button>
             </div>
           </div>
         </div>
