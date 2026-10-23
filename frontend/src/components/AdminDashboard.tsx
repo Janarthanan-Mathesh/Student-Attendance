@@ -257,7 +257,7 @@ export const AdminDashboard: React.FC = () => {
                         inputMode={['workingDays', 'presentDays'].includes(String(key)) ? 'numeric' : undefined}
                         placeholder={key === 'department' ? 'E.G. CS OR COMPUTER SCIENCE & ENGINEERING' : undefined}
                         value={singleStudent[key as keyof typeof singleStudent]}
-                        onChange={(e) => setSingleStudent((current) => ({ ...current, [key]: e.target.value }))}
+                        onChange={(e) => setSingleStudent((current) => ({ ...current, [String(key)]: e.target.value }))}
                         className={formFieldClass}
                       />
                     </label>
