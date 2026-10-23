@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchDeliveryHealthAPI, fetchAuditLogsAPI, fetchStudents } from '../lib/api';
+import { fetchDeliveryHealthAPI, fetchAuditLogsAPI, fetchStudents, fetchRegistrationOptionsAPI } from '../lib/api';
 import { uploadBulkExcelAPI } from '../lib/api';
 import { AuditLog, Student } from '../types';
 import { ShieldCheck, Activity, Send, CheckCircle2, AlertTriangle, Search, Server, FileCheck } from 'lucide-react';
@@ -13,13 +13,18 @@ export const AdminDashboard: React.FC = () => {
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
   const [uploadResult, setUploadResult] = useState<string | null>(null);
   const [uploadMode, setUploadMode] = useState<'bulk' | 'single'>('bulk');
+  const [departments, setDepartments] = useState<Array<{ code: string; name: string }>>([]);
+  const [registeredMentors, setRegisteredMentors] = useState<Array<{ register_no: string; name: string; email: string }>>([]);
+  const [registrationOptionsError, setRegistrationOptionsError] = useState<string | null>(null);
+  const [registrationOptionsLoading, setRegistrationOptionsLoading] = useState<boolean>(true);
   const [singleStudent, setSingleStudent] = useState({
     registerNo: '', name: '', studentEmail: '', studentPhone: '', parentName: '', parentPhone: '', parentEmail: '',
-    mentorName: '', mentorEmail: '', mentorId: '', department: '', section: 'A', workingDays: '', presentDays: ''
+    mentorName: '', mentorEmail: '', mentorId: '', department: '', workingDays: '', presentDays: ''
   });
 
   useEffect(() => {
     loadAdminData();
+    loadRegistrationOptions();
   }, []);
 
   const loadAdminData = async () => {
@@ -36,6 +41,21 @@ export const AdminDashboard: React.FC = () => {
       setStudents(roster);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const loadRegistrationOptions = async () => {
+    setRegistrationOptionsError(null);
+    setRegistrationOptionsLoading(true);
+    try {
+      const result = await fetchRegistrationOptionsAPI();
+      if (!result.success) throw new Error(result.error || 'Could not load registration options.');
+      setDepartments(result.departments || []);
+      setRegisteredMentors(result.mentors || []);
+    } catch (error) {
+      setRegistrationOptionsError(error instanceof Error ? error.message : 'Could not load registration options.');
+    } finally {
+      setRegistrationOptionsLoading(false);
     }
   };
 
@@ -136,14 +156,13 @@ export const AdminDashboard: React.FC = () => {
         'MENTOR EMAIL': singleStudent.mentorEmail.trim().toLowerCase(),
         'MENTOR ID': singleStudent.mentorId.trim().toUpperCase(),
         DEPARTMENT: singleStudent.department,
-        SECTION: singleStudent.section.trim().toUpperCase(),
         'TOTAL WORKING DAYS': singleStudent.workingDays || '0',
         'TOTAL PRESENT DAYS': singleStudent.presentDays || '0'
       };
       const res = await uploadBulkExcelAPI([row]);
       if (res.success) {
         setUploadResult(`REGISTERED ${res.processed_count || 0} STUDENT, PARENT, AND ${res.mentor_count || 0} MENTOR`);
-        setSingleStudent({ registerNo: '', name: '', studentEmail: '', studentPhone: '', parentName: '', parentPhone: '', parentEmail: '', mentorName: '', mentorEmail: '', mentorId: '', department: '', section: 'A', workingDays: '', presentDays: '' });
+        setSingleStudent({ registerNo: '', name: '', studentEmail: '', studentPhone: '', parentName: '', parentPhone: '', parentEmail: '', mentorName: '', mentorEmail: '', mentorId: '', department: '', workingDays: '', presentDays: '' });
         await loadAdminData();
       } else setUploadResult(`FAILED: ${res.error || 'UNKNOWN ERROR'}`);
     } catch (err: any) {
@@ -230,7 +249,7 @@ export const AdminDashboard: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-900 p-1">
               <button type="button" onClick={() => { setUploadMode('bulk'); setUploadResult(null); }} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase ${uploadMode === 'bulk' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}>Bulk CSV Upload</button>
-              <button type="button" onClick={() => { setUploadMode('single'); setUploadResult(null); }} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase ${uploadMode === 'single' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}>Single Student Form</button>
+              <button type="button" onClick={() => { setUploadMode('single'); setUploadResult(null); loadRegistrationOptions(); }} className={`rounded-lg px-4 py-2 text-xs font-bold uppercase ${uploadMode === 'single' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}>Single Student Form</button>
             </div>
 
             {uploadMode === 'bulk' ? (
@@ -245,8 +264,7 @@ export const AdminDashboard: React.FC = () => {
                   {[
                     ['registerNo', 'ROLL NUMBER', true], ['name', 'STUDENT NAME', true], ['studentEmail', 'STUDENT EMAIL', true], ['studentPhone', 'STUDENT PHONE', false],
                     ['parentName', 'PARENT / GUARDIAN NAME', true], ['parentPhone', 'PARENT PHONE', false], ['parentEmail', 'PARENT EMAIL', true],
-                    ['mentorName', 'MENTOR NAME', true], ['mentorEmail', 'MENTOR EMAIL', true], ['mentorId', 'MENTOR ID', true],
-                    ['department', 'DEPARTMENT (MATCH ROLL NUMBER)', true], ['section', 'SECTION', true], ['workingDays', 'TOTAL WORKING DAYS', false], ['presentDays', 'TOTAL PRESENT DAYS', false]
+                    ['workingDays', 'TOTAL WORKING DAYS', false], ['presentDays', 'TOTAL PRESENT DAYS', false]
                   ].map(([key, label, required]) => (
                     <label key={String(key)} className="space-y-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                       {String(label)}
@@ -262,8 +280,45 @@ export const AdminDashboard: React.FC = () => {
                       />
                     </label>
                   ))}
+                  <label className="space-y-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    DEPARTMENT (MATCH ROLL NUMBER)
+                    <select
+                      required
+                      value={singleStudent.department}
+                      onChange={(e) => setSingleStudent((current) => ({ ...current, department: e.target.value }))}
+                      className={formFieldClass}
+                    >
+                      <option value="" disabled>{registrationOptionsLoading ? 'LOADING DEPARTMENTS…' : registrationOptionsError ? 'DEPARTMENTS UNAVAILABLE' : 'SELECT DEPARTMENT'}</option>
+                      {departments.map((department) => <option key={department.code} value={department.name}>{department.name.toUpperCase()}</option>)}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    SELECT REGISTERED MENTOR (NAME — ID)
+                    <select
+                      required
+                      value={singleStudent.mentorId}
+                      onChange={(e) => {
+                        const mentor = registeredMentors.find((candidate) => candidate.register_no === e.target.value);
+                        setSingleStudent((current) => ({
+                          ...current,
+                          mentorId: mentor?.register_no || '',
+                          mentorName: mentor?.name || '',
+                          mentorEmail: mentor?.email || ''
+                        }));
+                      }}
+                      className={formFieldClass}
+                    >
+                      <option value="" disabled>{registrationOptionsLoading ? 'LOADING REGISTERED MENTORS…' : registrationOptionsError ? 'MENTORS UNAVAILABLE' : 'SELECT MENTOR'}</option>
+                      {registeredMentors.map((mentor) => (
+                        <option key={mentor.register_no} value={mentor.register_no}>{mentor.name.toUpperCase()} — {mentor.register_no.toUpperCase()}</option>
+                      ))}
+                    </select>
+                    {singleStudent.mentorId && <span className="block pt-1 text-[10px] text-slate-500">ID: {singleStudent.mentorId} · EMAIL: {singleStudent.mentorEmail}</span>}
+                  </label>
                 </div>
-                <button type="submit" className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold uppercase text-white hover:bg-emerald-500">Register Student</button>
+                {registrationOptionsError && <p className="text-xs text-rose-300">{registrationOptionsError}</p>}
+                {!registrationOptionsLoading && !registrationOptionsError && registeredMentors.length === 0 && <p className="text-xs text-amber-300">NO REGISTERED FACULTY ACCOUNTS FOUND. ADD A FACULTY ACCOUNT BEFORE REGISTERING A STUDENT.</p>}
+                <button type="submit" disabled={registrationOptionsLoading || Boolean(registrationOptionsError) || departments.length === 0 || registeredMentors.length === 0} className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold uppercase text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50">Register Student</button>
               </form>
             )}
 

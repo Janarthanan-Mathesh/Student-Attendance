@@ -1,7 +1,21 @@
 import { Request, Response } from 'express';
-import { runAsync, getAsync } from '../db/database';
+import { allAsync, runAsync, getAsync } from '../db/database';
 import { AttendanceRosterRecord, attendanceRisk, normalizeAttendanceRosterRow, stableAccountKey, uniqueAccountEmail } from '../services/rosterUtils';
-import { hasInstitutionEmail, validateStudentRosterIdentity } from '../services/departmentRules';
+import { hasInstitutionEmail, STUDENT_DEPARTMENTS, validateStudentRosterIdentity } from '../services/departmentRules';
+
+export async function getRegistrationOptions(_req: Request, res: Response) {
+  try {
+    const mentors = await allAsync<{ register_no: string; name: string; email: string }>(
+      `SELECT register_no, name, email FROM users
+       WHERE role = 'FACULTY' AND TRIM(COALESCE(register_no, '')) <> ''
+       ORDER BY UPPER(name), UPPER(register_no)`
+    );
+    const departments = Object.entries(STUDENT_DEPARTMENTS).map(([code, department]) => ({ code, name: department.name }));
+    return res.json({ success: true, departments, mentors });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+}
 
 export async function bulkUploadExcel(req: Request, res: Response) {
   try {

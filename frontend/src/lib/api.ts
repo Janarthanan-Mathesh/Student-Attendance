@@ -75,6 +75,11 @@ export async function uploadBulkExcelAPI(rows: any[]) {
   return await res.json();
 }
 
+export async function fetchRegistrationOptionsAPI() {
+  const res = await fetch(`${API_BASE}/upload/registration-options`, { headers: { ...getUserHeaders() } });
+  return await res.json();
+}
+
 export async function fetchStudents(): Promise<Student[]> {
   const res = await fetch(`${API_BASE}/students`, { headers: { ...getUserHeaders() } });
   const json = await res.json();

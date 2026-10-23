@@ -8,7 +8,7 @@ import { createCounselingLog, getCounselingLogs } from '../controllers/counselin
 import { getAuditLogs } from '../controllers/auditController';
 import { generatePDFNotice } from '../controllers/pdfController';
 import { registerUser, verifyAuthenticatorRegistration, loginUser, verifyLoginAuthenticator, updateProfile } from '../controllers/authController';
-import { bulkUploadExcel } from '../controllers/uploadController';
+import { bulkUploadExcel, getRegistrationOptions } from '../controllers/uploadController';
 
 const router = Router();
 
@@ -21,6 +21,7 @@ router.post('/auth/login/verify-authenticator', verifyLoginAuthenticator);
 
 // Bulk Excel / CSV Upload Route
 router.post('/upload/bulk-excel', bulkUploadExcel);
+router.get('/upload/registration-options', getRegistrationOptions);
 
 // Student Routes
 router.get('/students', getStudents);
