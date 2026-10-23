@@ -173,9 +173,9 @@ export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorN
         <nav aria-label="Mentor workspace" className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
           {navItems.map(({ id, label, icon: Icon }) => (
             <button key={id} type="button" onClick={() => setActiveSection(id)} aria-current={activeSection === id ? 'page' : undefined}
-              className={`flex min-w-max items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-semibold transition-colors md:w-full md:whitespace-normal ${activeSection === id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-950/40' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+              className={`flex min-w-max items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-semibold transition-colors md:min-w-0 md:w-full ${activeSection === id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-950/40' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
               <Icon className="h-4 w-4 shrink-0" />
-              <span>{label}</span>
+              <span className="min-w-0 flex-1 whitespace-normal break-words leading-4">{label}</span>
               {id === 'OD' && odRequestCounts.PENDING > 0 && <span className="ml-auto rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] text-amber-200">{odRequestCounts.PENDING}</span>}
             </button>
           ))}
