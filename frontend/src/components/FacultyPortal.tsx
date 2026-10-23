@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DeficiencyRecord, Student, LeaveODRequest } from '../types';
 import { fetchDeficiencyRecords, dispatchBatchAlertsAPI, submitCounselingAPI, approveLeaveODAPI, fetchStudents, fetchStudentDetails } from '../lib/api';
-import { Send, Filter, MessageSquare, AlertTriangle, CheckCircle, FileText, UserCheck, ShieldAlert, Bell, Clock, X } from 'lucide-react';
+import { Send, Filter, MessageSquare, AlertTriangle, CheckCircle, FileText, UserCheck, ShieldAlert, Bell, Clock, X, LayoutDashboard, ClipboardList, Users, Activity } from 'lucide-react';
 
 interface FacultyPortalProps {
   onOpenPDF: (studentId: string, courseCode: string) => void;
@@ -12,6 +12,8 @@ interface FacultyPortalProps {
 }
 
 export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorName = 'Assigned Mentor', mentorFilter, rosterStudents, onOpenParent }) => {
+  const [activeSection, setActiveSection] = useState<'DASHBOARD' | 'OD' | 'STUDENTS' | 'ATTENDANCE'>('DASHBOARD');
+  const [odStatusFilter, setOdStatusFilter] = useState<'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
   const [records, setRecords] = useState<DeficiencyRecord[]>([]);
   const [students, setStudents] = useState<Array<Student & { leave_od_requests?: LeaveODRequest[] }>>([]);
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
@@ -151,9 +153,38 @@ export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorN
 
   const workingDayTotal = visibleStudents.reduce((sum, student) => sum + (student.courses || []).reduce((courseSum, course) => courseSum + course.total_conducted, 0), 0);
   const presentDayTotal = visibleStudents.reduce((sum, student) => sum + (student.courses || []).reduce((courseSum, course) => courseSum + course.total_attended, 0), 0);
+  const allODRequests = students.flatMap((student) => (student.leave_od_requests || []).map((request) => ({ student, request })));
+  const odRequestCounts = {
+    PENDING: allODRequests.filter(({ request }) => request.status === 'PENDING').length,
+    APPROVED: allODRequests.filter(({ request }) => request.status === 'APPROVED').length,
+    REJECTED: allODRequests.filter(({ request }) => request.status === 'REJECTED').length
+  };
+  const navItems = [
+    { id: 'DASHBOARD' as const, label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'OD' as const, label: 'OD Requests', icon: ClipboardList },
+    { id: 'STUDENTS' as const, label: 'Student Details', icon: Users },
+    { id: 'ATTENDANCE' as const, label: 'Student Attendance Tracker & Deficiency', icon: Activity }
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-5 md:flex-row md:items-start">
+      <aside className="w-full shrink-0 rounded-2xl border border-slate-800 bg-slate-900/70 p-2 md:sticky md:top-24 md:w-64">
+        <p className="px-3 pb-2 pt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Mentor Workspace</p>
+        <nav aria-label="Mentor workspace" className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
+          {navItems.map(({ id, label, icon: Icon }) => (
+            <button key={id} type="button" onClick={() => setActiveSection(id)} aria-current={activeSection === id ? 'page' : undefined}
+              className={`flex min-w-max items-center gap-3 rounded-xl px-3 py-3 text-left text-xs font-semibold transition-colors md:w-full md:whitespace-normal ${activeSection === id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-950/40' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+              <Icon className="h-4 w-4 shrink-0" />
+              <span>{label}</span>
+              {id === 'OD' && odRequestCounts.PENDING > 0 && <span className="ml-auto rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] text-amber-200">{odRequestCounts.PENDING}</span>}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <div className="min-w-0 flex-1">
+      <div className="space-y-6">
+      {activeSection === 'DASHBOARD' && <>
       
       {/* Header Banner */}
       <div className="glass-card rounded-2xl p-6 border border-indigo-500/20 bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -196,7 +227,9 @@ export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorN
           <p className="text-xs">Students {band.label}</p><p className="text-2xl font-extrabold mt-1">{band.count}</p>
         </div>)}
       </section>
+      </>}
 
+      {activeSection === 'OD' && <>
       {/* Mentor OD / medical notifications and review inbox */}
       <section className="glass-card rounded-2xl p-6 border border-amber-500/20 space-y-4" aria-live="polite">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -207,17 +240,22 @@ export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorN
               <p className="text-xs text-slate-400">Requests from students assigned to your mentor account.</p>
             </div>
           </div>
-          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200">
-            {students.reduce((count, student) => count + (student.leave_od_requests || []).filter((request) => request.status === 'PENDING').length, 0)} pending
-          </span>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200">{allODRequests.length} total requests</span>
+        </div>
+        <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
+          {(['PENDING', 'APPROVED', 'REJECTED'] as const).map((status) => (
+            <button key={status} type="button" onClick={() => setOdStatusFilter(status)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${odStatusFilter === status ? status === 'PENDING' ? 'bg-amber-500/20 text-amber-200' : status === 'APPROVED' ? 'bg-emerald-500/20 text-emerald-200' : 'bg-rose-500/20 text-rose-200' : 'text-slate-400 hover:bg-slate-800'}`}>
+              {status === 'PENDING' ? 'OD Requested' : status} <span className="ml-1 opacity-75">({odRequestCounts[status]})</span>
+            </button>
+          ))}
         </div>
         {reviewMessage && <p role="status" className="rounded-lg border border-cyan-500/20 bg-cyan-950/30 p-2 text-xs text-cyan-200">{reviewMessage}</p>}
-        {students.every((student) => !(student.leave_od_requests || []).length) ? (
-          <p className="text-xs text-slate-400">No OD or medical requests have been submitted by your assigned students.</p>
+        {allODRequests.filter(({ request }) => request.status === odStatusFilter).length === 0 ? (
+          <p className="text-xs text-slate-400">No {odStatusFilter.toLowerCase()} OD or medical requests.</p>
         ) : (
           <div className="space-y-3">
-            {students.flatMap((student) => (student.leave_od_requests || []).map((request) => ({ student, request })))
-              .sort((left, right) => Number(left.request.status !== 'PENDING') - Number(right.request.status !== 'PENDING') || right.request.id - left.request.id)
+            {allODRequests.filter(({ request }) => request.status === odStatusFilter)
+              .sort((left, right) => right.request.id - left.request.id)
               .map(({ student, request }) => {
                 const statusColor = request.status === 'APPROVED' ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-300' : request.status === 'REJECTED' ? 'border-rose-500/30 bg-rose-950/20 text-rose-300' : 'border-amber-500/30 bg-amber-950/20 text-amber-300';
                 return <article key={request.id} className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
@@ -241,33 +279,35 @@ export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorN
           </div>
         )}
       </section>
+      </>}
 
+      {activeSection === 'STUDENTS' && <>
       <section className="glass-card rounded-2xl p-6 border border-indigo-500/20 space-y-4">
         <div>
           <h3 className="font-bold text-white">Student and Parent Details</h3>
-          <p className="text-xs text-slate-400">Students assigned to your mentor account, with guardian contact details and leave requests.</p>
+          <p className="text-xs text-slate-400">Select a student to open their parent communication gateway and attendance details.</p>
         </div>
-        {visibleStudents.length === 0 ? <p className="text-sm text-slate-400">No students are currently assigned to this mentor.</p> : <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-          {visibleStudents.map((student) => {
-            const leaveRequests = student.leave_od_requests || [];
-            return <article key={student.student_id} role={onOpenParent ? 'button' : undefined} tabIndex={onOpenParent ? 0 : undefined} onClick={() => onOpenParent?.(student.student_id)} onKeyDown={(event) => { if (onOpenParent && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpenParent(student.student_id); } }} className={`rounded-xl bg-slate-950/50 border border-slate-800 p-4 space-y-3 ${onOpenParent ? 'cursor-pointer hover:border-cyan-500/50 hover:bg-slate-900/70 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/50' : ''}`}>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div><h4 className="font-bold text-white">{student.name}</h4><p className="text-xs text-slate-400">{student.register_no} · {student.department} · Section {student.section}</p></div>
-                <span className="text-[10px] px-2 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">{student.overall_risk || 'SAFE'}</span>
-              </div>
-              <div className="text-xs text-slate-300 space-y-1">
-                <p>Student: {student.email} · {student.phone}</p>
-                <p>Parent: <span className="font-semibold text-cyan-300">{student.parent_name}</span> · {student.parent_phone} · {student.parent_email}</p>
-              </div>
-              <div className="border-t border-slate-800 pt-2">
-                <p className="text-[11px] uppercase tracking-wide text-slate-400 mb-1">Leave / OD Details</p>
-                {leaveRequests.length ? leaveRequests.map((leave) => <p key={leave.id} className="text-xs text-slate-300">{leave.request_type} · {leave.date_from} to {leave.date_to} · {leave.hours_applied} hrs · {leave.status} · {leave.reason}</p>) : <p className="text-xs text-slate-400">No leave / OD requests recorded.</p>}
-              </div>
-            </article>;
-          })}
+        {visibleStudents.length === 0 ? <p className="text-sm text-slate-400">No students are currently assigned to this mentor.</p> : <div className="overflow-x-auto rounded-xl border border-slate-800">
+          <table className="w-full min-w-[1000px] text-left text-xs">
+            <thead className="bg-slate-900/80 text-[10px] uppercase tracking-wide text-slate-400"><tr><th className="p-3">Student</th><th className="p-3">Contact</th><th className="p-3">Parent / Guardian</th><th className="p-3">Attendance</th><th className="p-3">Communication</th></tr></thead>
+            <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+              {visibleStudents.map((student) => {
+                const average = student.courses?.length ? student.courses.reduce((sum, course) => sum + course.current_percentage, 0) / student.courses.length : 0;
+                return <tr key={student.student_id} role={onOpenParent ? 'button' : undefined} tabIndex={onOpenParent ? 0 : undefined} onClick={() => onOpenParent?.(student.student_id)} onKeyDown={(event) => { if (onOpenParent && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpenParent(student.student_id); } }} className={`transition-colors ${onOpenParent ? 'cursor-pointer hover:bg-slate-800/70 focus:outline-none focus:bg-slate-800/70' : ''}`}>
+                  <td className="p-3"><span className="block font-semibold text-white">{student.name}</span><span className="text-[10px] text-slate-400">{student.register_no} · {student.department}</span></td>
+                  <td className="p-3 text-slate-300"><span className="block">{student.email}</span><span className="text-slate-500">{student.phone}</span></td>
+                  <td className="p-3 text-slate-300"><span className="block font-medium text-cyan-300">{student.parent_name}</span><span className="block">{student.parent_email}</span><span className="text-slate-500">{student.parent_phone}</span></td>
+                  <td className="p-3"><span className="font-semibold text-white">{average.toFixed(2)}%</span><span className="block text-[10px] text-slate-400">{student.overall_risk || 'SAFE'}</span></td>
+                  <td className="p-3"><span className="inline-flex rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 font-semibold text-cyan-200">OPEN PARENT GATEWAY →</span></td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
         </div>}
       </section>
+      </>}
 
+      {activeSection === 'DASHBOARD' && <>
       {/* Current roster totals and mentor actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 glass-card rounded-2xl p-6 border border-slate-800 space-y-3">
@@ -304,7 +344,9 @@ export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorN
           </button>
         </div>
       </div>
+      </>}
 
+      {activeSection === 'ATTENDANCE' && <>
       {/* Smart Filters & Deficiency Records Table */}
       <div className="glass-card rounded-2xl border border-slate-800 overflow-hidden">
         
@@ -455,6 +497,8 @@ export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorN
             </tbody>
           </table>
         </div>
+      </div>
+      </>}
       </div>
 
       {/* Dispatch Batch Alert Modal */}
@@ -613,6 +657,7 @@ export const FacultyPortal: React.FC<FacultyPortalProps> = ({ onOpenPDF, mentorN
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 };
